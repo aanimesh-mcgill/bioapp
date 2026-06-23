@@ -1,0 +1,22 @@
+{
+  "name": "autobioapp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Autobio - Mobile-first autobiography storytelling app",
+  "workspaces": [
+    "apps/web",
+    "functions"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web",
+    "functions:build": "npm run build --workspace=functions",
+    "functions:serve": "npm run serve --workspace=functions",
+    "firebase:emulator": "firebase emulators:start",
+    "firebase:deploy": "firebase deploy"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
