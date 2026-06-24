@@ -1,58 +1,303 @@
 rules_version = '2';
 
+
+
 service cloud.firestore {
+
   match /databases/{database}/documents {
+
     function isSignedIn() {
+
       return request.auth != null;
+
     }
+
+
 
     function isOwner(userId) {
+
       return isSignedIn() && request.auth.uid == userId;
+
     }
+
+
 
     function isAdmin() {
+
       return isSignedIn() && request.auth.token.admin == true;
+
     }
+
+
+
+    function isPublishedBook(bookId) {
+
+      return get(/databases/$(database)/documents/books/$(bookId)).data.isPublished == true;
+
+    }
+
+
+
+    function isBookOwner(bookId) {
+
+      return isSignedIn()
+
+        && get(/databases/$(database)/documents/books/$(bookId)).data.userId == request.auth.uid;
+
+    }
+
+
+
+    function isPublishedStory(storySessionId) {
+
+      let story = get(/databases/$(database)/documents/storySessions/$(storySessionId));
+
+      return story.data.bookId != null && isPublishedBook(story.data.bookId);
+
+    }
+
+
+
+    function storySessionData(storySessionId) {
+
+      return get(/databases/$(database)/documents/storySessions/$(storySessionId)).data;
+
+    }
+
+
+
+    function canReadClip(clipData) {
+
+      let story = storySessionData(clipData.storySessionId);
+
+      return isPublishedStory(clipData.storySessionId)
+
+        || isOwner(clipData.userId)
+
+        || (story.bookOwnerId != null && isOwner(story.bookOwnerId))
+
+        || (story.bookId != null && isBookOwner(story.bookId))
+
+        || isAdmin();
+
+    }
+
+
+
+    function isValidContributorCreate() {
+
+      let invite = get(/databases/$(database)/documents/contributorInvites/$(request.resource.data.contributorInviteId));
+
+      return request.resource.data.isContributorStory == true
+
+        && invite.data.isActive == true
+
+        && invite.data.bookId == request.resource.data.bookId
+
+        && invite.data.ownerId == request.resource.data.bookOwnerId
+
+        && request.resource.data.userId == request.auth.uid
+
+        && request.resource.data.contributorName == invite.data.contributorName
+
+        && request.resource.data.contributorRelationship == invite.data.relationship;
+
+    }
+
+
 
     match /users/{userId} {
+
       allow read: if isOwner(userId) || isAdmin();
+
       allow create: if isOwner(userId);
+
       allow update: if isOwner(userId) || isAdmin();
+
       allow delete: if isOwner(userId);
+
     }
+
+
+
+    match /contributorInvites/{inviteId} {
+
+      allow read: if resource.data.isActive == true
+
+        || isOwner(resource.data.ownerId)
+
+        || isBookOwner(resource.data.bookId)
+
+        || isAdmin();
+
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if isOwner(resource.data.ownerId) || isAdmin();
+
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+
+    }
+
+
+
+    match /books/{bookId} {
+
+      allow read: if resource.data.isPublished == true
+
+        || isOwner(resource.data.userId) || isAdmin();
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
+      allow update: if isOwner(resource.data.userId) || isAdmin();
+
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+
+    }
+
+
+
+    match /chapters/{chapterId} {
+
+      allow read: if isPublishedBook(resource.data.bookId)
+
+        || isOwner(resource.data.userId)
+
+        || isBookOwner(resource.data.bookId)
+
+        || isAdmin();
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
+      allow update: if isOwner(resource.data.userId) || isBookOwner(resource.data.bookId) || isAdmin();
+
+      allow delete: if isOwner(resource.data.userId) || isBookOwner(resource.data.bookId) || isAdmin();
+
+    }
+
+
+
+    match /storySessions/{sessionId} {
+
+      allow read: if (resource.data.bookId != null && isPublishedBook(resource.data.bookId))
+
+        || isOwner(resource.data.userId)
+
+        || (resource.data.bookId != null && isBookOwner(resource.data.bookId))
+
+        || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
+
+        || isAdmin();
+
+      allow create: if isSignedIn() && (
+
+        (request.resource.data.userId == request.auth.uid && request.resource.data.isContributorStory != true)
+
+        || isValidContributorCreate()
+
+      );
+
+      allow update: if isOwner(resource.data.userId)
+
+        || isBookOwner(resource.data.bookId)
+
+        || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
+
+        || isAdmin();
+
+      allow delete: if isOwner(resource.data.userId)
+
+        || isBookOwner(resource.data.bookId)
+
+        || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
+
+        || isAdmin();
+
+    }
+
+
+
+    match /clips/{clipId} {
+
+      allow read: if canReadClip(resource.data);
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
+      allow update: if isOwner(resource.data.userId) || isAdmin();
+
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+
+    }
+
+
 
     match /stories/{storyId} {
+
       allow read: if isSignedIn() && (
+
         resource.data.userId == request.auth.uid ||
+
         resource.data.buyerId == request.auth.uid ||
+
         isAdmin()
+
       );
+
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
       allow update: if isSignedIn() && (
+
         resource.data.userId == request.auth.uid ||
+
         resource.data.buyerId == request.auth.uid ||
+
         isAdmin()
+
       );
+
       allow delete: if isSignedIn() && (
+
         resource.data.userId == request.auth.uid || isAdmin()
+
       );
+
     }
 
+
+
     match /recordings/{recordingId} {
+
       allow read: if isSignedIn() && (
+
         resource.data.userId == request.auth.uid ||
+
         resource.data.buyerId == request.auth.uid ||
+
         isAdmin()
+
       );
+
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
       allow update: if isSignedIn() && (
+
         resource.data.userId == request.auth.uid ||
+
         resource.data.buyerId == request.auth.uid ||
+
         isAdmin()
+
       );
+
       allow delete: if isSignedIn() && (
+
         resource.data.userId == request.auth.uid || isAdmin()
+
       );
+
     }
+
   }
+
 }
+
+

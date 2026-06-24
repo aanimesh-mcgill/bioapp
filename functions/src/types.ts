@@ -18,4 +18,5 @@ export interface StoryGenerationInput {
   outputLanguage: 'en' | 'hi';
   hindiOutputMode: HindiOutputMode;
   languageHint: TranscriptLanguage;
+  stimulusContext?: string;
 }

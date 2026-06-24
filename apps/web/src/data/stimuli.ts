@@ -1,0 +1,156 @@
+import type { Stimulus } from '@/types';
+
+export const AUTOBIOGRAPHY_STIMULI: Stimulus[] = [
+  {
+    id: 'earliest-memory',
+    order: 1,
+    category: 'Origins',
+    categoryHi: 'शुरुआत',
+    titleEn: 'Earliest Memory',
+    titleHi: 'सबसे पुरानी याद',
+    promptEn: 'What is the earliest memory you can recall? Describe the scene, the people, and how it felt.',
+    promptHi: 'आपकी सबसे पुरानी याद क्या है? दृश्य, लोग और अनुभव का वर्णन करें।',
+  },
+  {
+    id: 'childhood-home',
+    order: 2,
+    category: 'Origins',
+    categoryHi: 'शुरुआत',
+    titleEn: 'Childhood Home',
+    titleHi: 'बचपन का घर',
+    promptEn: 'Describe the home where you grew up — the rooms, smells, sounds, and who lived there.',
+    promptHi: 'जिस घर में आप बड़े हुए, उसका वर्णन करें — कमरे, गंध, आवाज़ें और परिवार।',
+  },
+  {
+    id: 'parents-family',
+    order: 3,
+    category: 'Family',
+    categoryHi: 'परिवार',
+    titleEn: 'Parents & Family',
+    titleHi: 'माता-पिता और परिवार',
+    promptEn: 'Tell us about your parents and siblings. What were they like? What did you learn from them?',
+    promptHi: 'अपने माता-पिता और भाई-बहनों के बारे में बताएं। वे कैसे थे? आपने उनसे क्या सीखा?',
+  },
+  {
+    id: 'school-days',
+    order: 4,
+    category: 'Growing Up',
+    categoryHi: 'बड़ा होना',
+    titleEn: 'School Days',
+    titleHi: 'स्कूल के दिन',
+    promptEn: 'Share memories from school — teachers, friends, favourite subjects, or a memorable incident.',
+    promptHi: 'स्कूल की यादें साझा करें — शिक्षक, दोस्त, पसंदीदा विषय या कोई यादगार घटना।',
+  },
+  {
+    id: 'first-friend',
+    order: 5,
+    category: 'Growing Up',
+    categoryHi: 'बड़ा होना',
+    titleEn: 'First Friend',
+    titleHi: 'पहला दोस्त',
+    promptEn: 'Who was your first close friend? How did you meet? What adventures did you share?',
+    promptHi: 'आपका पहला करीबी दोस्त कौन था? मिले कैसे? कौन से adventures साझा किए?',
+  },
+  {
+    id: 'place-shaped-you',
+    order: 6,
+    category: 'Places',
+    categoryHi: 'स्थान',
+    titleEn: 'A Place That Shaped You',
+    titleHi: 'एक जगह जिसने आपको बनाया',
+    promptEn: 'Describe a city, village, or place that deeply influenced who you are today.',
+    promptHi: 'ऐसी जगह का वर्णन करें जिसने आपको गहराई से प्रभावित किया।',
+  },
+  {
+    id: 'challenge-overcome',
+    order: 7,
+    category: 'Turning Points',
+    categoryHi: 'महत्वपूर्ण मोड़',
+    titleEn: 'A Challenge You Overcame',
+    titleHi: 'एक चुनौती जो आपने पार की',
+    promptEn: 'Tell the story of a difficult time in your life and how you got through it.',
+    promptHi: 'जीवन के किसी कठिन समय की कहानी बताएं और आपने उसे कैसे पार किया।',
+  },
+  {
+    id: 'turning-point',
+    order: 8,
+    category: 'Turning Points',
+    categoryHi: 'महत्वपूर्ण मोड़',
+    titleEn: 'A Turning Point',
+    titleHi: 'एक महत्वपूर्ण मोड़',
+    promptEn: 'Describe a moment that changed the direction of your life.',
+    promptHi: 'ऐसे पल का वर्णन करें जिसने आपके जीवन की दिशा बदल दी।',
+  },
+  {
+    id: 'work-career',
+    order: 9,
+    category: 'Work & Purpose',
+    categoryHi: 'काम और उद्देश्य',
+    titleEn: 'Work & Career',
+    titleHi: 'काम और करियर',
+    promptEn: 'Share your journey through work — first job, mentors, proud moments, or lessons learned.',
+    promptHi: 'काम की यात्रा साझा करें — पहली नौकरी, गुरु, गर्व के पल या सीख।',
+  },
+  {
+    id: 'love-relationships',
+    order: 10,
+    category: 'Relationships',
+    categoryHi: 'रिश्ते',
+    titleEn: 'Love & Relationships',
+    titleHi: 'प्रेम और रिश्ते',
+    promptEn: 'Tell us about an important relationship — how you met, what you shared, what it meant.',
+    promptHi: 'एक महत्वपूर्ण रिश्ते के बारे में बताएं — मुलाकात, साझा अनुभव और महत्व।',
+  },
+  {
+    id: 'traditions-culture',
+    order: 11,
+    category: 'Culture',
+    categoryHi: 'संस्कृति',
+    titleEn: 'Traditions & Culture',
+    titleHi: 'परंपराएं और संस्कृति',
+    promptEn: 'Describe festivals, rituals, food, or customs that were important in your family.',
+    promptHi: 'परिवार में महत्वपूर्ण त्योहार, रीतियां, खाना या रीति-रिवाज का वर्णन करें।',
+  },
+  {
+    id: 'funny-moment',
+    order: 12,
+    category: 'Memories',
+    categoryHi: 'यादें',
+    titleEn: 'A Funny Moment',
+    titleHi: 'एक मज़ेदार पल',
+    promptEn: 'Share a humorous story from your life that still makes you smile.',
+    promptHi: 'जीवन की कोई मज़ेदार कहानी साझा करें जो आज भी मुस्कुराती है।',
+  },
+  {
+    id: 'lesson-learned',
+    order: 13,
+    category: 'Wisdom',
+    categoryHi: 'ज्ञान',
+    titleEn: 'A Lesson Learned',
+    titleHi: 'एक सीख',
+    promptEn: 'What is the most important lesson life has taught you? Share the story behind it.',
+    promptHi: 'जीवन ने आपको सबसे महत्वपूर्ण क्या सीख दी? उसकी कहानी साझा करें।',
+  },
+  {
+    id: 'legacy-message',
+    order: 14,
+    category: 'Legacy',
+    categoryHi: 'विरासत',
+    titleEn: 'Message for Future Generations',
+    titleHi: 'आने वाली पीढ़ियों के लिए संदेश',
+    promptEn: 'What would you want your children or grandchildren to know about your life and values?',
+    promptHi: 'आप अपने बच्चों या पोते-पोतियों को अपने जीवन और मूल्यों के बारे में क्या बताना चाहेंगे?',
+  },
+];
+
+export function getNextStimulus(completedIds: string[]): Stimulus | null {
+  return AUTOBIOGRAPHY_STIMULI.find((s) => !completedIds.includes(s.id)) ?? null;
+}
+
+export function getStimulusById(id: string): Stimulus | undefined {
+  return AUTOBIOGRAPHY_STIMULI.find((s) => s.id === id);
+}
+
+export function bilingualStimulusPrompt(stimulus: Stimulus): string {
+  return `${stimulus.promptEn}\n\n${stimulus.promptHi}`;
+}

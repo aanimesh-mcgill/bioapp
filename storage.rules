@@ -6,12 +6,48 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isValidAudio() {
+      return request.resource.contentType.matches('audio/.*')
+        || request.resource.contentType == 'video/webm'
+        || request.resource.contentType == 'application/octet-stream';
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // Legacy single-recording path
     match /recordings/{userId}/{recordingId}/{fileName} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow write: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.size < 100 * 1024 * 1024
-        && request.resource.contentType.matches('audio/.*');
+        && isValidAudio();
+    }
+
+    // Story session clips and images
+    match /stories/{userId}/{sessionId}/clips/{clipId}/{fileName} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.size < 50 * 1024 * 1024
+        && isValidAudio();
+    }
+
+    match /stories/{userId}/{sessionId}/images/{fileName} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.size < 20 * 1024 * 1024
+        && isValidImage();
+    }
+
+    match /stories/{userId}/{sessionId}/attachments/{fileName} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.size < 50 * 1024 * 1024
+        && (isValidImage() || request.resource.contentType.matches('video/.*'));
     }
   }
 }
