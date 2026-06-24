@@ -11,11 +11,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 
-ENV WHISPER_MODEL=small
+ENV WHISPER_MODEL=base
 ENV WHISPER_DEVICE=cpu
 ENV WHISPER_COMPUTE_TYPE=int8
-ENV PORT=8080
 
 EXPOSE 8080
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]

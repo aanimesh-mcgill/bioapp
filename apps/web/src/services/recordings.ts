@@ -89,7 +89,11 @@ export async function uploadRecording(
   const storagePath = `recordings/${userId}/${recordingId}/audio.webm`;
   const storageRef = ref(storage, storagePath);
 
-  const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: blob.type });
+  const contentType = blob.type.startsWith('audio/') || blob.type === 'video/webm'
+    ? blob.type
+    : 'audio/webm';
+
+  const uploadTask = uploadBytesResumable(storageRef, blob, { contentType });
 
   return new Promise((resolve, reject) => {
     uploadTask.on(

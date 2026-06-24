@@ -37,6 +37,10 @@ function buildUserPrompt(input: StoryGenerationInput): string {
       '\n\nNote: This is mixed Hindi-English speech. Clean it into readable, flowing text.';
   }
 
+  if (input.stimulusContext) {
+    prompt += `\n\nContext about the memory/stimulus:\n${input.stimulusContext}`;
+  }
+
   return prompt;
 }
 

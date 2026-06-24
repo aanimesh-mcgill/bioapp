@@ -1,3 +1,4 @@
+import mkcert from 'vite-plugin-mkcert';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -10,16 +11,17 @@ export default defineConfig({
     },
   },
   plugins: [
+    mkcert(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['logo.png', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png'],
       manifest: {
-        name: 'Autobio',
-        short_name: 'Autobio',
+        name: 'AATMA KATHA',
+        short_name: 'AATMA KATHA',
         description: 'Record your life stories and turn them into beautiful narratives',
-        theme_color: '#1e3a5f',
-        background_color: '#f8fafc',
+        theme_color: '#0a0a0a',
+        background_color: '#0a0a0a',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -34,6 +36,12 @@ export default defineConfig({
             sizes: '512x512',
             type: 'image/png',
           },
+          {
+            src: 'pwa-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
         ],
       },
     }),
@@ -41,5 +49,6 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    https: true,
   },
 });
