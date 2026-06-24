@@ -134,5 +134,14 @@ export interface PublicBookSnapshot {
     authorName: string;
     createdAt: string;
   }>;
+  audioClips: Array<{
+    id: string;
+    promptType: PromptType;
+    promptText: string;
+    imageUrl?: string;
+    audioUrl?: string;
+    createdByName: string;
+    createdAt: string;
+  }>;
   updatedAt: Date;
 }

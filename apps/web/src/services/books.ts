@@ -426,6 +426,9 @@ export async function refreshPublicBookSnapshot(bookId: string, requesterUid: st
   const storiesSnap = await getDocs(
     query(collection(db, 'bookStories'), where('bookId', '==', bookId), orderBy('createdAt', 'asc')),
   );
+  const clipsSnap = await getDocs(
+    query(collection(db, 'bookAudioClips'), where('bookId', '==', bookId), orderBy('createdAt', 'asc')),
+  );
 
   const shareToken = book.activeShareToken || randomToken(18);
   const payload: Omit<PublicBookSnapshot, 'id'> = {
@@ -442,6 +445,18 @@ export async function refreshPublicBookSnapshot(bookId: string, requesterUid: st
         imageUrl: story.imageUrl,
         authorName: story.authorName,
         createdAt: story.createdAt.toISOString(),
+      };
+    }),
+    audioClips: clipsSnap.docs.map((docSnap) => {
+      const clip = mapAudioClip(docSnap);
+      return {
+        id: clip.id,
+        promptType: clip.promptType,
+        promptText: clip.promptText,
+        imageUrl: clip.imageUrl,
+        audioUrl: clip.audioUrl,
+        createdByName: clip.createdByName,
+        createdAt: clip.createdAt.toISOString(),
       };
     }),
     updatedAt: new Date(),
@@ -471,6 +486,7 @@ export async function getPublicBookByToken(token: string): Promise<PublicBookSna
     description: data.description as string | undefined,
     shareToken: data.shareToken as string,
     stories: (data.stories as PublicBookSnapshot['stories']) ?? [],
+    audioClips: (data.audioClips as PublicBookSnapshot['audioClips']) ?? [],
     updatedAt: toDate(data.updatedAt),
   };
 }
