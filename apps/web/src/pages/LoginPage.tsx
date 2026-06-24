@@ -1,9 +1,13 @@
-import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { consumePendingInviteToken } from '@/pages/InvitationLinkPage';
 
 export function LoginPage() {
   const { user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteQuery = searchParams.get('invite');
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +23,13 @@ export function LoginPage() {
     );
   }
 
-  if (user) return <Navigate to="/" replace />;
+  useEffect(() => {
+    if (!user) return;
+    const pendingToken = inviteQuery ?? consumePendingInviteToken();
+    navigate(pendingToken ? `/invite/${pendingToken}` : '/contribute', { replace: true });
+  }, [user, inviteQuery, navigate]);
+
+  if (user) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

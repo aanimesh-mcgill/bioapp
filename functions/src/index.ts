@@ -13,6 +13,7 @@ const db = getFirestore();
 
 interface RecordingDoc {
   userId: string;
+  bookId?: string;
   title: string;
   languageHint?: string;
   hindiOutputMode?: string;
@@ -87,6 +88,7 @@ export const processRecordingUpload = onObjectFinalized(
       await db.collection('stories').add({
         recordingId,
         userId,
+        bookId: recording.bookId ?? '',
         title: recording.title,
         transcript: {
           text: transcript.text,

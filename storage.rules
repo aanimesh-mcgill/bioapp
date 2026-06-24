@@ -6,10 +6,24 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isBookMember(bookId) {
+      return isSignedIn() && (
+        firestore.get(/databases/(default)/documents/books/$(bookId)).data.ownerId == request.auth.uid ||
+        request.auth.uid in firestore.get(/databases/(default)/documents/books/$(bookId)).data.collaborators
+      );
+    }
+
     match /recordings/{userId}/{recordingId}/{fileName} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow write: if isSignedIn()
         && request.auth.uid == userId
+        && request.resource.size < 100 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+    }
+
+    match /book-audio/{bookId}/{clipId}/{fileName} {
+      allow read: if isBookMember(bookId);
+      allow write: if isBookMember(bookId)
         && request.resource.size < 100 * 1024 * 1024
         && request.resource.contentType.matches('audio/.*');
     }

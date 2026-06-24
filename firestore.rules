@@ -14,6 +14,25 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
+    function userEmail() {
+      return isSignedIn() ? request.auth.token.email : null;
+    }
+
+    function bookDoc(bookId) {
+      return get(/databases/$(database)/documents/books/$(bookId));
+    }
+
+    function isBookMember(bookId) {
+      return isSignedIn() && (
+        bookDoc(bookId).data.ownerId == request.auth.uid ||
+        request.auth.uid in bookDoc(bookId).data.collaborators
+      );
+    }
+
+    function isBookOwner(bookId) {
+      return isSignedIn() && bookDoc(bookId).data.ownerId == request.auth.uid;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId);
@@ -25,12 +44,14 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         resource.data.userId == request.auth.uid ||
         resource.data.buyerId == request.auth.uid ||
+        (resource.data.bookId is string && resource.data.bookId != '' && isBookMember(resource.data.bookId)) ||
         isAdmin()
       );
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if isSignedIn() && (
         resource.data.userId == request.auth.uid ||
         resource.data.buyerId == request.auth.uid ||
+        (resource.data.bookId is string && resource.data.bookId != '' && isBookMember(resource.data.bookId)) ||
         isAdmin()
       );
       allow delete: if isSignedIn() && (
@@ -42,17 +63,76 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         resource.data.userId == request.auth.uid ||
         resource.data.buyerId == request.auth.uid ||
+        (resource.data.bookId is string && resource.data.bookId != '' && isBookMember(resource.data.bookId)) ||
         isAdmin()
       );
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        (
+          !(request.resource.data.bookId is string) ||
+          request.resource.data.bookId == '' ||
+          isBookMember(request.resource.data.bookId)
+        );
       allow update: if isSignedIn() && (
         resource.data.userId == request.auth.uid ||
         resource.data.buyerId == request.auth.uid ||
+        (resource.data.bookId is string && resource.data.bookId != '' && isBookMember(resource.data.bookId)) ||
         isAdmin()
       );
       allow delete: if isSignedIn() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
+    }
+
+    match /books/{bookId} {
+      allow read: if isBookMember(bookId) || isAdmin();
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.collaborators is list;
+      allow update: if isBookOwner(bookId) || isAdmin();
+      allow delete: if isBookOwner(bookId) || isAdmin();
+    }
+
+    match /bookStories/{storyId} {
+      allow read: if isBookMember(resource.data.bookId) || isAdmin();
+      allow create: if isSignedIn() &&
+        request.resource.data.authorId == request.auth.uid &&
+        isBookMember(request.resource.data.bookId);
+      allow update: if isBookMember(resource.data.bookId) || isAdmin();
+      allow delete: if isBookMember(resource.data.bookId) || isAdmin();
+    }
+
+    match /bookAudioClips/{clipId} {
+      allow read: if isBookMember(resource.data.bookId) || isAdmin();
+      allow create: if isSignedIn() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        isBookMember(request.resource.data.bookId);
+      allow update: if isBookMember(resource.data.bookId) || isAdmin();
+      allow delete: if isBookMember(resource.data.bookId) || isAdmin();
+    }
+
+    match /bookInvitations/{token} {
+      allow read: if true;
+      allow create: if isSignedIn() && isBookOwner(request.resource.data.bookId);
+      allow update: if isSignedIn() && (
+        isBookOwner(resource.data.bookId) ||
+        (
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.inviteeUid == request.auth.uid &&
+          (
+            resource.data.inviteeEmail == userEmail() ||
+            resource.data.inviteeUid == request.auth.uid
+          )
+        )
+      );
+      allow delete: if isBookOwner(resource.data.bookId) || isAdmin();
+    }
+
+    match /publicBooks/{token} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && isBookOwner(request.resource.data.bookId);
+      allow delete: if isSignedIn() && isBookOwner(resource.data.bookId);
     }
   }
 }

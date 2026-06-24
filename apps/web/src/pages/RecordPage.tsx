@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useBook } from '@/context/BookContext';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { uploadRecording } from '@/services/recordings';
 import type { TranscriptLanguage } from '@/types';
@@ -13,6 +14,7 @@ function formatDuration(seconds: number) {
 
 export function RecordPage() {
   const { user, profile } = useAuth();
+  const { activeBook } = useBook();
   const navigate = useNavigate();
   const { isRecording, duration, blob, error, start, stop, reset } = useAudioRecorder();
 
@@ -25,7 +27,7 @@ export function RecordPage() {
   const [uploadError, setUploadError] = useState('');
 
   const handleUpload = async () => {
-    if (!user || !blob || !title.trim()) return;
+    if (!user || !activeBook || !blob || !title.trim()) return;
     setUploading(true);
     setUploadError('');
     try {
@@ -37,6 +39,7 @@ export function RecordPage() {
           durationSeconds: duration,
           languageHint,
           hindiOutputMode: profile?.preferences.hindiOutputMode ?? 'hindi_script',
+          bookId: activeBook.id,
         },
         setUploadProgress,
       );
@@ -48,9 +51,21 @@ export function RecordPage() {
     }
   };
 
+  if (!activeBook) {
+    return (
+      <div className="px-4 py-6">
+        <h1 className="mb-4 text-2xl font-bold text-brand-600">Record Story</h1>
+        <div className="card text-sm text-slate-600">
+          Select or create a book first from the Books page before recording.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col px-4 py-6">
       <h1 className="mb-6 text-2xl font-bold text-brand-600">Record Story</h1>
+      <p className="mb-4 text-sm text-slate-500">Book: {activeBook.title}</p>
 
       <input
         className="input-field mb-4"

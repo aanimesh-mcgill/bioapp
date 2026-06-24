@@ -25,6 +25,7 @@ function mapRecording(id: string, data: Record<string, unknown>): Recording {
   return {
     id,
     userId: data.userId as string,
+    bookId: data.bookId as string | undefined,
     buyerId: data.buyerId as string | undefined,
     title: data.title as string,
     storagePath: data.storagePath as string,
@@ -44,6 +45,7 @@ function mapStory(id: string, data: Record<string, unknown>): Story {
     id,
     recordingId: data.recordingId as string,
     userId: data.userId as string,
+    bookId: data.bookId as string | undefined,
     buyerId: data.buyerId as string | undefined,
     title: data.title as string,
     transcript: data.transcript as Story['transcript'],
@@ -66,11 +68,13 @@ export async function uploadRecording(
     durationSeconds: number;
     languageHint: TranscriptLanguage;
     hindiOutputMode: HindiOutputMode;
+    bookId?: string;
   },
   onProgress?: (pct: number) => void,
 ): Promise<string> {
   const recordingRef = await addDoc(collection(db, 'recordings'), {
     userId,
+    bookId: opts.bookId ?? '',
     title: opts.title,
     storagePath: '',
     durationSeconds: opts.durationSeconds,
@@ -111,11 +115,13 @@ export async function uploadRecording(
 
 export function subscribeToRecordings(
   userId: string,
+  bookId: string,
   callback: (recordings: Recording[]) => void,
 ) {
   const q = query(
     collection(db, 'recordings'),
     where('userId', '==', userId),
+    where('bookId', '==', bookId),
     orderBy('createdAt', 'desc'),
   );
   return onSnapshot(q, (snap) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useBook } from '@/context/BookContext';
 import { subscribeToRecordings, getStoryForRecording } from '@/services/recordings';
 import type { Recording, Story } from '@/types';
 
@@ -22,6 +23,7 @@ const statusColors: Record<Recording['status'], string> = {
 
 export function StoriesPage() {
   const { user } = useAuth();
+  const { activeBook } = useBook();
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get('recording');
 
@@ -29,9 +31,9 @@ export function StoriesPage() {
   const [storyMap, setStoryMap] = useState<Record<string, Story | null>>({});
 
   useEffect(() => {
-    if (!user) return;
-    return subscribeToRecordings(user.uid, setRecordings);
-  }, [user]);
+    if (!user || !activeBook) return;
+    return subscribeToRecordings(user.uid, activeBook.id, setRecordings);
+  }, [user, activeBook]);
 
   useEffect(() => {
     recordings.forEach(async (r) => {
@@ -41,6 +43,17 @@ export function StoriesPage() {
       }
     });
   }, [recordings, storyMap]);
+
+  if (!activeBook) {
+    return (
+      <div className="px-4 py-6">
+        <h1 className="mb-6 text-2xl font-bold text-brand-600">My Stories</h1>
+        <div className="card text-sm text-slate-600">
+          Select an active book first. All stories are scoped to the selected book.
+        </div>
+      </div>
+    );
+  }
 
   if (recordings.length === 0) {
     return (

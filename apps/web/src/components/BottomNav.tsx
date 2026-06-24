@@ -2,8 +2,9 @@ import { NavLink } from 'react-router-dom';
 
 const links = [
   { to: '/', label: 'Home', icon: '🏠' },
-  { to: '/record', label: 'Record', icon: '🎙️' },
-  { to: '/stories', label: 'Stories', icon: '📖' },
+  { to: '/books', label: 'Books', icon: '📚' },
+  { to: '/contribute', label: 'Contribute', icon: '✍️' },
+  { to: '/invitations', label: 'Invites', icon: '📨' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
