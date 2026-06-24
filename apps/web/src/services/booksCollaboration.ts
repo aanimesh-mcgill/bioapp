@@ -19,7 +19,7 @@ import {
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import type {
-  CollabBook,
+  AuthorBook,
   BookAudioClip,
   BookInvitation,
   BookStory,
@@ -41,7 +41,7 @@ function toDate(value: unknown): Date {
   return (value as { toDate: () => Date })?.toDate?.() ?? new Date();
 }
 
-function mapBook(snap: QueryDocumentSnapshot<DocumentData>): CollabBook {
+function mapBook(snap: QueryDocumentSnapshot<DocumentData>): AuthorBook {
   const data = snap.data();
   return {
     id: snap.id,
@@ -129,7 +129,7 @@ export async function ensureUserHasBook(userId: string): Promise<string> {
   return createBook(userId, 'My First Book', 'Start collecting your life stories.');
 }
 
-export function subscribeToBooks(userId: string, callback: (books: CollabBook[]) => void) {
+export function subscribeToBooks(userId: string, callback: (books: AuthorBook[]) => void) {
   const ownerQ = query(
     collection(db, 'books'),
     where('ownerId', '==', userId),
@@ -141,11 +141,11 @@ export function subscribeToBooks(userId: string, callback: (books: CollabBook[])
     orderBy('updatedAt', 'desc'),
   );
 
-  let ownerBooks: CollabBook[] = [];
-  let collaboratorBooks: CollabBook[] = [];
+  let ownerBooks: AuthorBook[] = [];
+  let collaboratorBooks: AuthorBook[] = [];
 
   const publish = () => {
-    const merged = new Map<string, CollabBook>();
+    const merged = new Map<string, AuthorBook>();
     ownerBooks.forEach((book) => merged.set(book.id, book));
     collaboratorBooks.forEach((book) => merged.set(book.id, book));
     callback(
@@ -170,7 +170,7 @@ export function subscribeToBooks(userId: string, callback: (books: CollabBook[])
   };
 }
 
-export async function getBook(bookId: string): Promise<CollabBook | null> {
+export async function getBook(bookId: string): Promise<AuthorBook | null> {
   const snap = await getDoc(doc(db, 'books', bookId));
   if (!snap.exists()) return null;
   const data = snap.data();
@@ -187,7 +187,7 @@ export async function getBook(bookId: string): Promise<CollabBook | null> {
 }
 
 export async function createBookInvitation(params: {
-  book: CollabBook;
+  book: AuthorBook;
   inviterId: string;
   inviterName: string;
   inviteeEmail: string;

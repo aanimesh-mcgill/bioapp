@@ -222,12 +222,12 @@ export interface BookPage {
   story?: StorySession;
 }
 
-/** Multi-book collaboration model (Cursor cloud branch). Separate from album `Book`. */
+/** Multi-book author model for managed books; collaborator access is optional. */
 export type BookInvitationStatus = 'pending' | 'accepted' | 'revoked';
 export type BookStoryStatus = 'draft' | 'submitted';
 export type PromptType = 'text' | 'image';
 
-export interface CollabBook {
+export interface AuthorBook {
   id: string;
   ownerId: string;
   title: string;

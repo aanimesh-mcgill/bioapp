@@ -118,6 +118,8 @@ interface PromptClipListProps {
 
 export function PromptClipList({ clips, onDelete }: PromptClipListProps) {
   if (clips.length === 0) return null;
+  const repeatingClips = clips.length <= 1 ? clips : [...clips, ...clips, ...clips];
+  const baseCount = clips.length;
 
   return (
     <div className="space-y-2">
@@ -127,34 +129,44 @@ export function PromptClipList({ clips, onDelete }: PromptClipListProps) {
         enClass="text-sm font-semibold uppercase tracking-wide text-slate-500"
         hiClass="text-xs text-slate-400"
       />
-      {clips.map((clip, idx) => (
-        <div key={clip.id} className="card flex items-start gap-3 py-3">
-          <ClipPlayButton audioUrl={clip.audioUrl} size="md" />
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
-            {idx + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            {clip.label && (
-              <p className="text-sm font-medium text-slate-800">{clip.label}</p>
-            )}
-            <p className="text-xs text-slate-500">
-              {clip.durationSeconds ? `${formatDuration(clip.durationSeconds)} · ` : ''}
-              {clipStatusLabel(clip.status)}
-            </p>
-            {clip.transcript?.text && (
-              <p className="mt-1 line-clamp-3 text-sm text-slate-700">{clip.transcript.text}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className="shrink-0 rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-            onClick={() => onDelete(clip.id)}
-            aria-label="Delete clip"
-          >
-            ✕
-          </button>
+      <div className="overflow-x-auto pt-1">
+        <div className="flex min-w-max gap-3">
+          {repeatingClips.map((clip, idx) => {
+            const normalizedIdx = idx % baseCount;
+            const showDelete = baseCount <= 1 || (idx >= baseCount && idx < baseCount * 2);
+            return (
+              <div key={`${clip.id}-${idx}`} className="card flex w-80 shrink-0 items-start gap-3 py-3">
+                <ClipPlayButton audioUrl={clip.audioUrl} size="md" />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
+                  {normalizedIdx + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  {clip.label && (
+                    <p className="text-sm font-medium text-slate-800">{clip.label}</p>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    {clip.durationSeconds ? `${formatDuration(clip.durationSeconds)} · ` : ''}
+                    {clipStatusLabel(clip.status)}
+                  </p>
+                  {clip.transcript?.text && (
+                    <p className="mt-1 line-clamp-3 text-sm text-slate-700">{clip.transcript.text}</p>
+                  )}
+                </div>
+                {showDelete && (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+                    onClick={() => onDelete(clip.id)}
+                    aria-label="Delete clip"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
-      ))}
+      </div>
     </div>
   );
 }
