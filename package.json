@@ -14,7 +14,8 @@
     "functions:build": "npm run build --workspace=functions",
     "functions:serve": "npm run serve --workspace=functions",
     "firebase:emulator": "firebase emulators:start",
-    "firebase:deploy": "firebase deploy"
+    "firebase:deploy": "firebase deploy",
+    "deploy:cloud-run": "bash ./scripts/deploy-cloud-run.sh"
   },
   "engines": {
     "node": ">=20"
