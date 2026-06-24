@@ -302,7 +302,7 @@ export interface PublicBookSnapshot {
     createdByName: string;
     createdAt: string;
   }>;
-  updatedAt: string;
+  updatedAt: Date;
 }
 
 // Legacy types
@@ -310,7 +310,6 @@ export type RecordingStatus = ClipStatus | 'generating' | 'ready';
 export interface Recording {
   id: string;
   userId: string;
-  bookId?: string;
   buyerId?: string;
   title: string;
   storagePath: string;
@@ -328,7 +327,6 @@ export interface Story {
   id: string;
   recordingId: string;
   userId: string;
-  bookId?: string;
   buyerId?: string;
   title: string;
   transcript: Transcript;
@@ -339,83 +337,5 @@ export interface Story {
   status: StoryStatus;
   buyerNotes?: string;
   createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Book {
-  id: string;
-  ownerId: string;
-  title: string;
-  description?: string;
-  activeShareToken?: string;
-  collaborators: string[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface BookInvitation {
-  id: string;
-  token: string;
-  bookId: string;
-  bookTitle: string;
-  inviterId: string;
-  inviterName: string;
-  inviteeEmail: string;
-  inviteeUid?: string;
-  status: BookInvitationStatus;
-  createdAt: Date;
-  updatedAt: Date;
-  acceptedAt?: Date;
-}
-
-export interface BookStory {
-  id: string;
-  bookId: string;
-  title: string;
-  content: string;
-  imageUrl?: string;
-  status: BookStoryStatus;
-  authorId: string;
-  authorName: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface BookAudioClip {
-  id: string;
-  bookId: string;
-  promptType: PromptType;
-  promptText: string;
-  imageUrl?: string;
-  audioUrl: string;
-  storagePath: string;
-  createdBy: string;
-  createdByName: string;
-  createdAt: Date;
-}
-
-export interface PublicBookSnapshot {
-  id: string;
-  bookId: string;
-  bookTitle: string;
-  description?: string;
-  shareToken: string;
-  stories: Array<{
-    id: string;
-    title: string;
-    content: string;
-    imageUrl?: string;
-    authorName: string;
-    createdAt: string;
-  }>;
-  audioClips: Array<{
-    id: string;
-    promptType: PromptType;
-    promptText: string;
-    imageUrl?: string;
-    audioUrl?: string;
-    createdByName: string;
-    createdAt: string;
-  }>;
   updatedAt: Date;
 }

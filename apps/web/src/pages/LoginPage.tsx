@@ -50,6 +50,7 @@ export function LoginPage() {
   const [searchParams] = useSearchParams();
 
   const redirectTo = searchParams.get('redirect') ?? '/';
+  const inviteToken = searchParams.get('invite');
 
 
 
@@ -81,7 +82,15 @@ export function LoginPage() {
 
 
 
-  if (user) return <Navigate to={redirectTo} replace />;
+  if (user) {
+    const pendingInvite = inviteToken ?? consumePendingInviteToken();
+    return (
+      <Navigate
+        to={pendingInvite ? `/invite/${pendingInvite}` : redirectTo}
+        replace
+      />
+    );
+  }
 
 
 

@@ -104,6 +104,25 @@ service cloud.firestore {
 
     }
 
+    function userEmail() {
+      return isSignedIn() ? request.auth.token.email : null;
+    }
+
+    function collabBookDoc(bookId) {
+      return get(/databases/$(database)/documents/collabBooks/$(bookId));
+    }
+
+    function isCollabBookMember(bookId) {
+      return isSignedIn() && (
+        collabBookDoc(bookId).data.ownerId == request.auth.uid ||
+        request.auth.uid in collabBookDoc(bookId).data.collaborators
+      );
+    }
+
+    function isCollabBookOwner(bookId) {
+      return isSignedIn() && collabBookDoc(bookId).data.ownerId == request.auth.uid;
+    }
+
 
 
     match /users/{userId} {
@@ -294,6 +313,59 @@ service cloud.firestore {
 
       );
 
+    }
+
+    match /collabBooks/{bookId} {
+      allow read: if isCollabBookMember(bookId) || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.collaborators is list;
+      allow update: if isCollabBookOwner(bookId) || isAdmin();
+      allow delete: if isCollabBookOwner(bookId) || isAdmin();
+    }
+
+    match /bookStories/{storyId} {
+      allow read: if isCollabBookMember(resource.data.bookId) || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && isCollabBookMember(request.resource.data.bookId);
+      allow update: if isCollabBookMember(resource.data.bookId) || isAdmin();
+      allow delete: if isCollabBookMember(resource.data.bookId) || isAdmin();
+    }
+
+    match /bookAudioClips/{clipId} {
+      allow read: if isCollabBookMember(resource.data.bookId) || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && isCollabBookMember(request.resource.data.bookId);
+      allow update: if isCollabBookMember(resource.data.bookId) || isAdmin();
+      allow delete: if isCollabBookMember(resource.data.bookId) || isAdmin();
+    }
+
+    match /bookInvitations/{token} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && isCollabBookOwner(request.resource.data.bookId);
+      allow update: if isSignedIn() && (
+        isCollabBookOwner(resource.data.bookId) ||
+        (
+          resource.data.status == 'pending' &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.inviteeUid == request.auth.uid &&
+          (
+            resource.data.inviteeEmail == userEmail() ||
+            resource.data.inviteeUid == request.auth.uid
+          )
+        )
+      );
+      allow delete: if isCollabBookOwner(resource.data.bookId) || isAdmin();
+    }
+
+    match /publicBooks/{token} {
+      allow read: if true;
+      allow create, update: if isSignedIn()
+        && isCollabBookOwner(request.resource.data.bookId);
+      allow delete: if isSignedIn() && isCollabBookOwner(resource.data.bookId);
     }
 
   }

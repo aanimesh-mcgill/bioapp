@@ -28,6 +28,8 @@ import type {
   PublicBookSnapshot,
 } from '@/types';
 
+const COLLAB_BOOKS_COLLECTION = 'collabBooks';
+
 function randomToken(length = 22) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let token = '';
@@ -106,7 +108,7 @@ function mapAudioClip(snap: QueryDocumentSnapshot<DocumentData>): BookAudioClip 
 }
 
 export async function createBook(ownerId: string, title: string, description = ''): Promise<string> {
-  const bookRef = await addDoc(collection(db, 'books'), {
+  const bookRef = await addDoc(collection(db, COLLAB_BOOKS_COLLECTION), {
     ownerId,
     title,
     description,
@@ -118,11 +120,16 @@ export async function createBook(ownerId: string, title: string, description = '
 }
 
 export async function ensureUserHasBook(userId: string): Promise<string> {
-  const ownerBooks = await getDocs(query(collection(db, 'books'), where('ownerId', '==', userId)));
+  const ownerBooks = await getDocs(
+    query(collection(db, COLLAB_BOOKS_COLLECTION), where('ownerId', '==', userId)),
+  );
   if (!ownerBooks.empty) return ownerBooks.docs[0].id;
 
   const invitedBooks = await getDocs(
-    query(collection(db, 'books'), where('collaborators', 'array-contains', userId)),
+    query(
+      collection(db, COLLAB_BOOKS_COLLECTION),
+      where('collaborators', 'array-contains', userId),
+    ),
   );
   if (!invitedBooks.empty) return invitedBooks.docs[0].id;
 
@@ -131,12 +138,12 @@ export async function ensureUserHasBook(userId: string): Promise<string> {
 
 export function subscribeToBooks(userId: string, callback: (books: CollabBook[]) => void) {
   const ownerQ = query(
-    collection(db, 'books'),
+    collection(db, COLLAB_BOOKS_COLLECTION),
     where('ownerId', '==', userId),
     orderBy('updatedAt', 'desc'),
   );
   const collaboratorQ = query(
-    collection(db, 'books'),
+    collection(db, COLLAB_BOOKS_COLLECTION),
     where('collaborators', 'array-contains', userId),
     orderBy('updatedAt', 'desc'),
   );
@@ -171,7 +178,7 @@ export function subscribeToBooks(userId: string, callback: (books: CollabBook[])
 }
 
 export async function getBook(bookId: string): Promise<CollabBook | null> {
-  const snap = await getDoc(doc(db, 'books', bookId));
+  const snap = await getDoc(doc(db, COLLAB_BOOKS_COLLECTION, bookId));
   if (!snap.exists()) return null;
   const data = snap.data();
   return {
@@ -306,7 +313,7 @@ export async function acceptInvitation(token: string, params: { userId: string; 
       updatedAt: serverTimestamp(),
     });
 
-    const bookRef = doc(db, 'books', invite.bookId as string);
+    const bookRef = doc(db, COLLAB_BOOKS_COLLECTION, invite.bookId as string);
     tx.update(bookRef, {
       collaborators: arrayUnion(params.userId),
       updatedAt: serverTimestamp(),
@@ -467,7 +474,7 @@ export async function refreshPublicBookSnapshot(bookId: string, requesterUid: st
     updatedAt: serverTimestamp(),
   });
 
-  await updateDoc(doc(db, 'books', bookId), {
+  await updateDoc(doc(db, COLLAB_BOOKS_COLLECTION, bookId), {
     activeShareToken: shareToken,
     updatedAt: serverTimestamp(),
   });

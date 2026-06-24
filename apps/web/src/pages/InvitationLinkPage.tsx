@@ -3,7 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useBook } from '@/context/BookContext';
 import { clearPendingInviteToken, setPendingInviteToken } from '@/lib/pendingInvite';
-import { acceptInvitation, getInvitationByToken } from '@/services/books';
+import {
+  acceptInvitation,
+  getInvitationByToken,
+} from '@/services/booksCollaboration';
 import type { BookInvitation } from '@/types';
 
 export function InvitationLinkPage() {

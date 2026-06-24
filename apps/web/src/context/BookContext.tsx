@@ -7,12 +7,16 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { createBook, ensureUserHasBook, subscribeToBooks } from '@/services/books';
-import type { Book } from '@/types';
+import {
+  createBook,
+  ensureUserHasBook,
+  subscribeToBooks,
+} from '@/services/booksCollaboration';
+import type { CollabBook } from '@/types';
 
 interface BookContextValue {
-  books: Book[];
-  activeBook: Book | null;
+  books: CollabBook[];
+  activeBook: CollabBook | null;
   loading: boolean;
   selectBook: (bookId: string) => void;
   createAndSelectBook: (title: string, description?: string) => Promise<void>;
@@ -22,7 +26,7 @@ const BookContext = createContext<BookContextValue | null>(null);
 
 export function BookProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [books, setBooks] = useState<Book[]>([]);
+  const [books, setBooks] = useState<CollabBook[]>([]);
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 

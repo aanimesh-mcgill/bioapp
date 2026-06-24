@@ -2,7 +2,10 @@ import { useMemo, useState } from 'react';
 import { BookSwitcher } from '@/components/BookSwitcher';
 import { useAuth } from '@/context/AuthContext';
 import { useBook } from '@/context/BookContext';
-import { createBookInvitation, refreshPublicBookSnapshot } from '@/services/books';
+import {
+  createBookInvitation,
+  refreshPublicBookSnapshot,
+} from '@/services/booksCollaboration';
 
 export function BooksPage() {
   const { user, profile } = useAuth();

@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useBook } from '@/context/BookContext';
-import { acceptInvitation, subscribeToInvitations } from '@/services/books';
+import {
+  acceptInvitation,
+  subscribeToInvitations,
+} from '@/services/booksCollaboration';
 import type { BookInvitation } from '@/types';
 
 export function InvitationsPage() {

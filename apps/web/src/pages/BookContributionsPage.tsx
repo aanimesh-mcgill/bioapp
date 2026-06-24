@@ -9,7 +9,7 @@ import {
   subscribeToBookStories,
   updateBookStory,
   uploadBookAudioClip,
-} from '@/services/books';
+} from '@/services/booksCollaboration';
 import type { BookAudioClip, BookStory, PromptType } from '@/types';
 
 export function BookContributionsPage() {

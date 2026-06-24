@@ -82,7 +82,7 @@
       ]
     },
     {
-      "collectionGroup": "books",
+      "collectionGroup": "collabBooks",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "ownerId", "order": "ASCENDING" },
@@ -90,7 +90,7 @@
       ]
     },
     {
-      "collectionGroup": "books",
+      "collectionGroup": "collabBooks",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "collaborators", "arrayConfig": "CONTAINS" },

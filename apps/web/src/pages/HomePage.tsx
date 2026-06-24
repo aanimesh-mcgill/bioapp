@@ -58,6 +58,33 @@ export function HomePage() {
       )}
 
       <div className="mb-4 grid grid-cols-2 gap-3">
+        <Link
+          to="/books"
+          className="card flex flex-col items-center gap-2 py-4 active:scale-[0.98]"
+        >
+          <span className="text-3xl">🤝</span>
+          <BilingualLine
+            en="Collab Books"
+            hi="सहयोग पुस्तकें"
+            enClass="text-sm font-semibold text-brand-600"
+            hiClass="text-xs text-brand-500"
+          />
+        </Link>
+        <Link
+          to="/invitations"
+          className="card flex flex-col items-center gap-2 py-4 active:scale-[0.98]"
+        >
+          <span className="text-3xl">📨</span>
+          <BilingualLine
+            en="Invitations"
+            hi="आमंत्रण"
+            enClass="text-sm font-semibold text-brand-600"
+            hiClass="text-xs text-brand-500"
+          />
+        </Link>
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-3">
         <Link to="/record" className="card flex flex-col items-center gap-2 py-4 active:scale-[0.98]">
           <span className="text-3xl">🎙️</span>
           <BilingualLine en="Free Record" hi="मुक्त रिकॉर्ड" enClass="text-sm font-semibold text-brand-600" hiClass="text-xs text-brand-500" />

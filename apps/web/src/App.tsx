@@ -11,6 +11,7 @@ import { StimuliPage } from '@/pages/StimuliPage';
 import { AddStimulusPage } from '@/pages/AddStimulusPage';
 import { BookManagePage } from '@/pages/BookManagePage';
 import { PublicBookPage } from '@/pages/PublicBookPage';
+import { PublicBrowsePage } from '@/pages/PublicBrowsePage';
 import { BookAlbumPreviewPage } from '@/pages/BookAlbumPreviewPage';
 import { ClipListenPage } from '@/pages/ClipListenPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -21,6 +22,10 @@ import {
   ContributeAddTextPage,
 } from '@/pages/ContributeActionPages';
 import { ContributeStoryPage } from '@/pages/ContributeStoryPage';
+import { BooksPage } from '@/pages/BooksPage';
+import { BookContributionsPage } from '@/pages/BookContributionsPage';
+import { InvitationsPage } from '@/pages/InvitationsPage';
+import { InvitationLinkPage } from '@/pages/InvitationLinkPage';
 
 function ContributeRoutes() {
   return (
@@ -41,6 +46,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/invite/:token" element={<InvitationLinkPage />} />
+      <Route path="/browse/:token" element={<PublicBrowsePage />} />
       <Route path="/read/:bookSlug/listen/:clipId" element={<ClipListenPage />} />
       <Route path="/read/:bookSlug" element={<PublicBookPage />} />
       <Route path="/read/:bookSlug/:storySlug" element={<PublicBookPage />} />
