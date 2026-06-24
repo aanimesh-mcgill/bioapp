@@ -112,11 +112,20 @@ firebase deploy
 ### Deploy transcription worker
 
 ```bash
-gcloud run deploy autobio-transcription \
-  --source services/transcription-worker \
-  --region us-central1 \
-  --memory 2Gi --cpu 2 --timeout 600
+npm run deploy:cloud-run
 ```
+
+Create a separate service name (new Cloud Run service):
+
+```bash
+npm run deploy:cloud-run -- autobio-transcription-v2
+```
+
+Optional environment variables:
+
+- `GOOGLE_CLOUD_PROJECT` - target GCP project ID
+- `CLOUD_RUN_REGION` - region override (default: `us-central1`)
+- `CLOUD_RUN_SOURCE_DIR` - source directory override (default: `services/transcription-worker`)
 
 ## CI/CD
 
