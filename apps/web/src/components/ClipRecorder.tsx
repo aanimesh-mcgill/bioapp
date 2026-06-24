@@ -24,6 +24,9 @@ export function ClipList({ clips, clipOrder, onMoveUp, onMoveDown, onDelete }: C
   const ordered = clipOrder
     .map((id) => clips.find((c) => c.id === id))
     .filter(Boolean) as AudioClip[];
+  const repeatingOrdered =
+    ordered.length <= 1 ? ordered : [...ordered, ...ordered, ...ordered];
+  const baseCount = ordered.length;
 
   if (ordered.length === 0) return null;
 
@@ -35,52 +38,62 @@ export function ClipList({ clips, clipOrder, onMoveUp, onMoveDown, onDelete }: C
         enClass="text-sm font-semibold uppercase tracking-wide text-slate-500"
         hiClass="text-xs text-slate-400"
       />
-      {ordered.map((clip, idx) => (
-        <div key={clip.id} className="card flex items-center gap-3 py-3">
-          <ClipPlayButton audioUrl={clip.audioUrl} size="md" />
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
-            {idx + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-slate-800">
-              {clip.label ?? `Clip ${idx + 1} / क्लिप ${idx + 1}`}
-              {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
-            </p>
-            <p className="text-xs text-slate-500">{clipStatusLabel(clip.status)}</p>
-            {clip.transcript?.text && (
-              <p className="mt-1 line-clamp-2 text-xs text-slate-600">{clip.transcript.text}</p>
-            )}
-          </div>
-          <div className="flex shrink-0 flex-col gap-1">
-            <button
-              type="button"
-              className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-              onClick={() => onMoveUp(clip.id)}
-              disabled={idx === 0}
-              aria-label="Move up"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-              onClick={() => onMoveDown(clip.id)}
-              disabled={idx === ordered.length - 1}
-              aria-label="Move down"
-            >
-              ↓
-            </button>
-            <button
-              type="button"
-              className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-              onClick={() => onDelete(clip.id)}
-              aria-label="Delete clip"
-            >
-              ✕
-            </button>
-          </div>
+      <div className="overflow-x-auto pt-1">
+        <div className="flex min-w-max gap-3">
+          {repeatingOrdered.map((clip, idx) => {
+            const normalizedIdx = idx % baseCount;
+            const showActions = baseCount <= 1 || (idx >= baseCount && idx < baseCount * 2);
+            return (
+              <div key={`${clip.id}-${idx}`} className="card flex w-80 shrink-0 items-center gap-3 py-3">
+                <ClipPlayButton audioUrl={clip.audioUrl} size="md" />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
+                  {normalizedIdx + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-800">
+                    {clip.label ?? `Clip ${normalizedIdx + 1} / क्लिप ${normalizedIdx + 1}`}
+                    {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
+                  </p>
+                  <p className="text-xs text-slate-500">{clipStatusLabel(clip.status)}</p>
+                  {clip.transcript?.text && (
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-600">{clip.transcript.text}</p>
+                  )}
+                </div>
+                {showActions && (
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                      onClick={() => onMoveUp(clip.id)}
+                      disabled={normalizedIdx === 0}
+                      aria-label="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                      onClick={() => onMoveDown(clip.id)}
+                      disabled={normalizedIdx === ordered.length - 1}
+                      aria-label="Move down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+                      onClick={() => onDelete(clip.id)}
+                      aria-label="Delete clip"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      ))}
+      </div>
     </div>
   );
 }

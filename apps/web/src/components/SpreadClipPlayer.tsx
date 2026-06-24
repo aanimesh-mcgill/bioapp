@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BilingualLine } from '@/components/BilingualText';
 import type { AudioClip } from '@/types';
 
@@ -18,6 +18,10 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
   const [playing, setPlaying] = useState(false);
 
   const readyClips = clips.filter((c) => c.audioUrl);
+  const repeatingClips = useMemo(() => {
+    if (readyClips.length <= 1) return readyClips;
+    return [...readyClips, ...readyClips, ...readyClips];
+  }, [readyClips]);
 
   const playFrom = useCallback(
     (idx: number) => {
@@ -67,34 +71,37 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
         enClass="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-800/70"
         hiClass="mb-3 text-xs text-amber-700/60"
       />
-      <div className="flex flex-wrap gap-3">
-        {readyClips.map((clip, idx) => {
-          const isActive = playing && activeIdx === idx;
-          return (
-            <button
-              key={clip.id}
-              type="button"
-              onClick={() => playFrom(idx)}
-              className={`flex items-center gap-2 rounded-xl px-3 py-2 ring-1 transition ${
-                isActive
-                  ? 'bg-brand-100 ring-brand-300'
-                  : 'bg-amber-50/80 ring-amber-200/50 hover:bg-amber-100/80'
-              }`}
-            >
-              <span
-                className={`flex h-10 w-10 items-center justify-center rounded-full text-base font-semibold ${
-                  isActive ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'
+      <div className="overflow-x-auto pt-1">
+        <div className="flex min-w-max gap-3">
+          {repeatingClips.map((clip, idx) => {
+            const normalizedIdx = readyClips.length === 0 ? idx : idx % readyClips.length;
+            const isActive = playing && activeIdx === normalizedIdx;
+            return (
+              <button
+                key={`${clip.id}-${idx}`}
+                type="button"
+                onClick={() => playFrom(normalizedIdx)}
+                className={`flex min-w-[140px] items-center gap-2 rounded-xl px-3 py-2 ring-1 transition ${
+                  isActive
+                    ? 'bg-brand-100 ring-brand-300'
+                    : 'bg-amber-50/80 ring-amber-200/50 hover:bg-amber-100/80'
                 }`}
               >
-                {isActive ? '⏸' : '▶'}
-              </span>
-              <span className="text-xs font-medium text-amber-900">
-                Clip {idx + 1}
-                {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
-              </span>
-            </button>
-          );
-        })}
+                <span
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-base font-semibold ${
+                    isActive ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'
+                  }`}
+                >
+                  {isActive ? '⏸' : '▶'}
+                </span>
+                <span className="text-xs font-medium text-amber-900">
+                  Clip {normalizedIdx + 1}
+                  {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
       {readyClips.length > 1 && (
         <p className="mt-2 text-center text-[10px] text-amber-700/60">
