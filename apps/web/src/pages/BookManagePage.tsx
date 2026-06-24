@@ -51,6 +51,8 @@ export function BookManagePage() {
   const [loadError, setLoadError] = useState('');
 
   const storiesById = useMemo(() => new Map(stories.map((s) => [s.id, s])), [stories]);
+  const bookId = book?.id;
+  const userId = user?.uid;
 
   useEffect(() => {
     if (!user) return;
@@ -69,24 +71,24 @@ export function BookManagePage() {
   }, [user, profile]);
 
   useEffect(() => {
-    if (!book) return;
-    return subscribeToBook(book.id, setBook);
-  }, [book?.id]);
+    if (!bookId) return;
+    return subscribeToBook(bookId, setBook);
+  }, [bookId]);
 
   useEffect(() => {
-    if (!book || !user) return;
-    return subscribeToChapters(book.id, user.uid, setChapters);
-  }, [book?.id, user?.uid]);
+    if (!bookId || !userId) return;
+    return subscribeToChapters(bookId, userId, setChapters);
+  }, [bookId, userId]);
 
   useEffect(() => {
-    if (!user) return;
-    return subscribeToSessions(user.uid, setStories);
-  }, [user?.uid]);
+    if (!userId) return;
+    return subscribeToSessions(userId, setStories);
+  }, [userId]);
 
   useEffect(() => {
-    if (!book) return;
-    return subscribeToInvites(book.id, setInvites);
-  }, [book?.id]);
+    if (!bookId) return;
+    return subscribeToInvites(bookId, setInvites);
+  }, [bookId]);
 
   const contributorStories = stories.filter(
     (s) => s.isContributorStory && !chapters.some((c) => c.storyOrder.includes(s.id)),

@@ -39,6 +39,7 @@ export function ContributorProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useContributorInvite() {
   const ctx = useContext(ContributorContext);
   if (!ctx) throw new Error('useContributorInvite must be used within ContributorProvider');

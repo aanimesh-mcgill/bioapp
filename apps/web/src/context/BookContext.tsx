@@ -111,6 +111,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useBook() {
   const ctx = useContext(BookContext);
   if (!ctx) throw new Error('useBook must be used within BookProvider');
