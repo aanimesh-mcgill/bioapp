@@ -25,7 +25,6 @@ import type {
   ImagePromptAnswers,
   ImagePromptEntry,
   StoryPerspective,
-  StoryContentBlock,
 } from '@/types';
 import { mergePromptAnswers, composeImageStoryReaderText } from '@/lib/imagePrompts';
 import { resolveStoryBlocks } from '@/lib/storyBlocks';

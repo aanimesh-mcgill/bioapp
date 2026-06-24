@@ -1,6 +1,6 @@
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, arrayUnion, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, writeBatch } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { stripUndefined } from '@/lib/firestoreUtils';
 import {
@@ -300,7 +300,7 @@ export async function deleteBlockClip(sessionId: string, blockId: string, clipId
 }
 
 export async function reorderBlockClips(sessionId: string, blockId: string, clipOrder: string[]) {
-  const { order, blocks } = await loadBlocks(sessionId);
+  const { blocks } = await loadBlocks(sessionId);
   const block = blocks[blockId];
   if (!block || block.type !== 'text') return;
 

@@ -3,7 +3,7 @@ import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
 import { ClipRecorder } from '@/components/ClipRecorder';
 import { PromptClipList } from '@/components/PromptClipRecorder';
 import { IMAGE_PROMPT_QUESTIONS } from '@/data/imagePromptQuestions';
-import { normalizePromptEntry, promptEntryStatus } from '@/lib/imagePrompts';
+import { promptEntryStatus } from '@/lib/imagePrompts';
 import { clipsForPrompt } from '@/lib/storyBlocks';
 import {
   deleteBlockClip,

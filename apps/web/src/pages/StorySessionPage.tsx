@@ -96,7 +96,6 @@ export function StorySessionPage() {
     const hasBlocks = storyHasRecordableContent(session, blocks, order);
     const hasLegacyImage =
       session.imageStimulus && hasAnyPromptContent(session.imageStimulus.prompts ?? {});
-    const hasLegacyText = Boolean(session.textStimulus?.content?.trim());
 
     const blockReaderText = composeBlocksReaderText(blocks, order);
     const hasOnlyBlockContent =
