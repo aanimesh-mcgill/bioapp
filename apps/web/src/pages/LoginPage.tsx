@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { consumePendingInviteToken } from '@/pages/InvitationLinkPage';
+import { consumePendingInviteToken } from '@/lib/pendingInvite';
 
 export function LoginPage() {
   const { user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
@@ -15,6 +15,12 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!user) return;
+    const pendingToken = inviteQuery ?? consumePendingInviteToken();
+    navigate(pendingToken ? `/invite/${pendingToken}` : '/contribute', { replace: true });
+  }, [user, inviteQuery, navigate]);
+
   if (loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
@@ -22,12 +28,6 @@ export function LoginPage() {
       </div>
     );
   }
-
-  useEffect(() => {
-    if (!user) return;
-    const pendingToken = inviteQuery ?? consumePendingInviteToken();
-    navigate(pendingToken ? `/invite/${pendingToken}` : '/contribute', { replace: true });
-  }, [user, inviteQuery, navigate]);
 
   if (user) return null;
 

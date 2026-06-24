@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useBook } from '@/context/BookContext';
+import { clearPendingInviteToken, setPendingInviteToken } from '@/lib/pendingInvite';
 import { acceptInvitation, getInvitationByToken } from '@/services/books';
 import type { BookInvitation } from '@/types';
-
-const PENDING_INVITE_KEY = 'autobio.pendingInviteToken';
 
 export function InvitationLinkPage() {
   const { token } = useParams<{ token: string }>();
@@ -17,7 +16,7 @@ export function InvitationLinkPage() {
 
   useEffect(() => {
     if (!token) return;
-    localStorage.setItem(PENDING_INVITE_KEY, token);
+    setPendingInviteToken(token);
     void getInvitationByToken(token).then(setInvitation);
   }, [token]);
 
@@ -30,7 +29,7 @@ export function InvitationLinkPage() {
 
     void acceptInvitation(token, { userId: user.uid, email: profile.email })
       .then((accepted) => {
-        localStorage.removeItem(PENDING_INVITE_KEY);
+        clearPendingInviteToken();
         selectBook(accepted.bookId);
         navigate('/contribute', { replace: true });
       })
@@ -58,11 +57,4 @@ export function InvitationLinkPage() {
       )}
     </div>
   );
-}
-
-export function consumePendingInviteToken() {
-  const token = localStorage.getItem(PENDING_INVITE_KEY);
-  if (!token) return null;
-  localStorage.removeItem(PENDING_INVITE_KEY);
-  return token;
 }
