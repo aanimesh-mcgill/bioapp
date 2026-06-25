@@ -1,4 +1,4 @@
-import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { stripUndefined } from '@/lib/firestoreUtils';
@@ -88,7 +88,31 @@ export async function savePdfOverrides(bookId: string, overrides: PdfOverrides):
   );
 }
 
-export async function saveBookPdf(bookId: string, blob: Blob): Promise<SavedBookPdfMeta> {
+/** Ensure album book has collabBookId so Storage rules can authorize PDF upload. */
+export async function ensureAlbumBookStorageAccess(
+  albumBookId: string,
+  collabBookId?: string,
+): Promise<void> {
+  if (!collabBookId) return;
+  const bookRef = doc(db, 'books', albumBookId);
+  const snap = await getDoc(bookRef);
+  if (!snap.exists()) return;
+  if (snap.data()?.collabBookId === collabBookId) return;
+  await updateDoc(bookRef, {
+    collabBookId,
+    updatedAt: serverTimestamp(),
+  });
+  console.info('[PDF] linked album book to collab for storage access:', albumBookId, collabBookId);
+}
+
+export async function saveBookPdf(
+  bookId: string,
+  blob: Blob,
+  opts?: { collabBookId?: string },
+): Promise<SavedBookPdfMeta> {
+  if (opts?.collabBookId) {
+    await ensureAlbumBookStorageAccess(bookId, opts.collabBookId);
+  }
   const storagePath = `album-books/${bookId}/saved.pdf`;
   const storageRef = ref(storage, storagePath);
   try {

@@ -17,8 +17,23 @@ service firebase.storage {
         || request.resource.contentType == 'application/octet-stream';
     }
 
-    function isValidPdf() {
-      return request.resource.contentType == 'application/pdf';
+    function storageCanAccessAlbum(albumBookId) {
+      let album = albumBook(albumBookId);
+      return album.data != null && (
+        album.data.userId == request.auth.uid
+        || (album.data.collabBookId != null
+          && collabBook(album.data.collabBookId).data != null
+          && (
+            collabBook(album.data.collabBookId).data.ownerId == request.auth.uid
+            || (collabBook(album.data.collabBookId).data.collaborators != null
+              && request.auth.uid in collabBook(album.data.collabBookId).data.collaborators)
+          ))
+      );
+    }
+
+    function isValidPdfUpload() {
+      return request.resource.contentType == 'application/pdf'
+        || request.resource.contentType == 'application/octet-stream';
     }
 
     function albumBook(bookId) {
@@ -180,10 +195,10 @@ service firebase.storage {
     }
 
     match /album-books/{bookId}/{fileName} {
-      allow read: if isPublishedAlbumBook(bookId) || canAccessAlbumBook(bookId);
-      allow write: if canAccessAlbumBook(bookId)
+      allow read: if isPublishedAlbumBook(bookId) || storageCanAccessAlbum(bookId);
+      allow write: if storageCanAccessAlbum(bookId)
         && request.resource.size < 100 * 1024 * 1024
-        && isValidPdf();
+        && isValidPdfUpload();
     }
   }
 }

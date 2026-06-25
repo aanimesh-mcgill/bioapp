@@ -29,7 +29,13 @@ function spreadLabel(page: AlbumSpread): string {
   return snippet ? `${snippet}…` : 'Story page';
 }
 
-export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
+export function BookPdfPreviewSection({
+  albumBook,
+  collabBookId,
+}: {
+  albumBook: Book;
+  collabBookId?: string;
+}) {
   const { user } = useAuth();
   const t = usePickText();
   const { locale } = useUiLocale();
@@ -156,7 +162,9 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
         }
       });
       setPdfProgress('Uploading PDF…');
-      const meta = await saveBookPdf(albumBook.id, blob);
+      const meta = await saveBookPdf(albumBook.id, blob, {
+        collabBookId: collabBookId ?? albumBook.collabBookId,
+      });
       setSavedPdf(meta);
       if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(meta.url);

@@ -62,7 +62,9 @@ export function BookSharingSections({
 
   return (
     <div className="space-y-4">
-      {albumBook && <BookPdfPreviewSection albumBook={albumBook} />}
+      {albumBook && (
+        <BookPdfPreviewSection albumBook={albumBook} collabBookId={collabBook.id} />
+      )}
       <BilingualLine
         en="Invite family and friends to contribute stories, or share a public link."
         hi="परिवार और मित्रों को कहानियाँ जोड़ने के लिए आमंत्रित करें, या सार्वजनिक लिंक साझा करें।"
