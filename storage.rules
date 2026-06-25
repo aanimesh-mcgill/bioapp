@@ -60,12 +60,16 @@ service firebase.storage {
       return isAlbumBookOwner(bookId) || isLinkedAlbumBook(bookId);
     }
 
+    function isBookPhotoSession(sessionId) {
+      return sessionId.matches('book-photos-.*');
+    }
+
     function bookPhotoCollabId(sessionId) {
-      return sessionId.split('book-photos-')[1];
+      return sessionId.replace('book-photos-', '');
     }
 
     function canReadBookPhotoSession(sessionId) {
-      return sessionId.matches('book-photos-.*')
+      return isBookPhotoSession(sessionId)
         && isCollabBookMember(bookPhotoCollabId(sessionId));
     }
 
@@ -75,24 +79,15 @@ service firebase.storage {
 
     function canReadStorySession(sessionId) {
       let story = storySessionDoc(sessionId);
-      return story.data != null && (
-        (story.data.collabBookId != null && isCollabBookMember(story.data.collabBookId))
-        || (story.data.bookId != null
-          && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.bookId))
-          && isCollabBookMember(story.data.bookId))
-        || (story.data.bookId != null
-          && firestore.exists(/databases/(default)/documents/books/$(story.data.bookId))
-          && isAlbumBookOwner(story.data.bookId))
-        || (story.data.bookId != null
-          && firestore.exists(/databases/(default)/documents/books/$(story.data.bookId))
-          && albumBook(story.data.bookId).data.collabBookId != null
-          && isCollabBookMember(albumBook(story.data.bookId).data.collabBookId))
-        || (story.data.chapterId != null
-          && firestore.exists(/databases/(default)/documents/chapters/$(story.data.chapterId))
-          && canAccessAlbumBook(
-            firestore.get(/databases/(default)/documents/chapters/$(story.data.chapterId)).data.bookId
-          ))
-      );
+      return !isBookPhotoSession(sessionId)
+        && story.data != null
+        && (
+          (story.data.collabBookId != null && isCollabBookMember(story.data.collabBookId))
+          || (story.data.bookId != null
+            && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.bookId))
+            && isCollabBookMember(story.data.bookId))
+          || (story.data.bookId != null && isAlbumBookOwner(story.data.bookId))
+        );
     }
 
     // Legacy single-recording path
@@ -107,31 +102,34 @@ service firebase.storage {
     // Story session clips and images
     function isPublishedStorySession(sessionId) {
       let story = storySessionDoc(sessionId);
-      return story.data != null && (
-        (story.data.bookId != null
-          && firestore.get(/databases/(default)/documents/books/$(story.data.bookId)).data.isPublished == true)
-        || (story.data.collabBookId != null
-          && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.collabBookId))
-          && firestore.get(/databases/(default)/documents/collabBooks/$(story.data.collabBookId)).data.publishedAlbumBookId != null
-          && firestore.get(
-            /databases/(default)/documents/books/$(
-              firestore.get(/databases/(default)/documents/collabBooks/$(story.data.collabBookId)).data.publishedAlbumBookId
-            )
-          ).data.isPublished == true)
-        || (story.data.chapterId != null
-          && firestore.exists(/databases/(default)/documents/chapters/$(story.data.chapterId))
-          && firestore.get(
-            /databases/(default)/documents/books/$(
-              firestore.get(/databases/(default)/documents/chapters/$(story.data.chapterId)).data.bookId
-            )
-          ).data.isPublished == true)
-      );
+      return !isBookPhotoSession(sessionId)
+        && story.data != null
+        && (
+          (story.data.bookId != null
+            && firestore.get(/databases/(default)/documents/books/$(story.data.bookId)).data.isPublished == true)
+          || (story.data.collabBookId != null
+            && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.collabBookId))
+            && firestore.get(/databases/(default)/documents/collabBooks/$(story.data.collabBookId)).data.publishedAlbumBookId != null
+            && firestore.get(
+              /databases/(default)/documents/books/$(
+                firestore.get(/databases/(default)/documents/collabBooks/$(story.data.collabBookId)).data.publishedAlbumBookId
+              )
+            ).data.isPublished == true)
+          || (story.data.chapterId != null
+            && firestore.exists(/databases/(default)/documents/chapters/$(story.data.chapterId))
+            && firestore.get(
+              /databases/(default)/documents/books/$(
+                firestore.get(/databases/(default)/documents/chapters/$(story.data.chapterId)).data.bookId
+              )
+            ).data.isPublished == true)
+        );
     }
 
     match /stories/{userId}/{sessionId}/clips/{clipId}/{fileName} {
       allow read: if (isSignedIn() && request.auth.uid == userId)
-        || isPublishedStorySession(sessionId)
-        || canReadStorySession(sessionId);
+        || canReadBookPhotoSession(sessionId)
+        || canReadStorySession(sessionId)
+        || isPublishedStorySession(sessionId);
       allow write: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.size < 50 * 1024 * 1024
@@ -140,9 +138,9 @@ service firebase.storage {
 
     match /stories/{userId}/{sessionId}/images/{fileName} {
       allow read: if (isSignedIn() && request.auth.uid == userId)
-        || isPublishedStorySession(sessionId)
+        || canReadBookPhotoSession(sessionId)
         || canReadStorySession(sessionId)
-        || canReadBookPhotoSession(sessionId);
+        || isPublishedStorySession(sessionId);
       allow write: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.size < 20 * 1024 * 1024

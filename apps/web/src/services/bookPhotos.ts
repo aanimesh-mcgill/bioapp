@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -74,7 +73,9 @@ export async function uploadBookPhoto(
   meta?: { date?: string; year?: number },
 ): Promise<string> {
   const fileKey = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  const imageStoragePath = `stories/${userId}/book-photos-${bookId}/images/${fileKey}`;
+  const photoRef = doc(photosCol(bookId));
+  const photoId = photoRef.id;
+  const imageStoragePath = `collabBooks/${bookId}/photos/${photoId}/${fileKey}`;
   const storageRef = ref(storage, imageStoragePath);
 
   let imageUrl: string;
@@ -86,7 +87,7 @@ export async function uploadBookPhoto(
   }
 
   try {
-    const photoRef = await addDoc(photosCol(bookId), {
+    await setDoc(photoRef, {
       bookId,
       imageUrl,
       imageStoragePath,
@@ -97,7 +98,7 @@ export async function uploadBookPhoto(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    return photoRef.id;
+    return photoId;
   } catch (err) {
     await deleteObject(storageRef).catch(() => undefined);
     throw err;

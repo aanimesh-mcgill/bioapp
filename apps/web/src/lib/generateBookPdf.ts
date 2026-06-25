@@ -59,8 +59,8 @@ function pageWithResolvedImage(page: AlbumSpread, resolved: Map<string, string>)
   const dataUrl =
     (page.imageUrl ? resolved.get(page.imageUrl) : undefined) ??
     (page.imageStoragePath ? resolved.get(page.imageStoragePath) : undefined);
-  if (!dataUrl) return page;
-  return { ...page, imageUrl: dataUrl };
+  if (!dataUrl) return { ...page, imageUrl: undefined, imageStoragePath: undefined };
+  return { ...page, imageUrl: dataUrl, imageStoragePath: undefined };
 }
 
 async function capturePage(container: HTMLElement): Promise<string> {
