@@ -77,6 +77,11 @@ service cloud.firestore {
 
       return (story.data.bookId != null && isPublishedBook(story.data.bookId))
 
+        || (story.data.collabBookId != null
+          && exists(/databases/$(database)/documents/collabBooks/$(story.data.collabBookId))
+          && collabBookDoc(story.data.collabBookId).data.publishedAlbumBookId != null
+          && isPublishedBook(collabBookDoc(story.data.collabBookId).data.publishedAlbumBookId))
+
         || (story.data.chapterId != null
 
           && exists(/databases/$(database)/documents/chapters/$(story.data.chapterId))

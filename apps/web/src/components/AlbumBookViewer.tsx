@@ -16,6 +16,7 @@ interface AlbumBookViewerProps {
   mode: 'preview' | 'public';
   backLink?: { to: string; label: string };
   initialPageIndex?: number;
+  autoPlayAudiobook?: boolean;
   shareUrl?: string | null;
   shareTitle?: string;
 }
@@ -120,6 +121,7 @@ export function AlbumBookViewer({
   mode,
   backLink,
   initialPageIndex = 0,
+  autoPlayAudiobook = false,
   shareUrl,
   shareTitle,
 }: AlbumBookViewerProps) {
@@ -128,13 +130,17 @@ export function AlbumBookViewer({
   const [showToc, setShowToc] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showHeader, setShowHeader] = useState(false);
-  const [audiobookMode, setAudiobookMode] = useState(false);
+  const [audiobookMode, setAudiobookMode] = useState(autoPlayAudiobook);
   const [pdfLoading, setPdfLoading] = useState(false);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const audiobookModeRef = useRef(audiobookMode);
 
-  audiobookModeRef.current = audiobookMode;
+  useEffect(() => {
+    if (autoPlayAudiobook) setAudiobookMode(true);
+  }, [autoPlayAudiobook, pageIndex]);
+
+  audiobookModeRef.current = audiobobookMode;
 
   const current = pages[pageIndex];
   const spreadClips = useMemo(

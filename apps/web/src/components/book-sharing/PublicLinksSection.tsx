@@ -3,7 +3,7 @@ import { BilingualBtn, BilingualLine, SectionHeading, T } from '@/components/Bil
 import { useAuth } from '@/context/AuthContext';
 import { usePickText, useUiLocale } from '@/context/UiLocaleContext';
 import { bookPublicUrl } from '@/lib/slug';
-import { publishBook } from '@/services/books';
+import { publishBook, syncPublishedAlbumLinkForBook } from '@/services/books';
 import { refreshPublicBookSnapshot } from '@/services/booksCollaboration';
 import { ShareButtons } from '@/components/ShareButtons';
 import type { AuthorBook, Book } from '@/types';
@@ -32,6 +32,12 @@ export function PublicLinksSection({
       setBrowseLink('');
     }
   }, [collabBook.activeShareToken, baseUrl]);
+
+  useEffect(() => {
+    if (albumBook?.isPublished) {
+      void syncPublishedAlbumLinkForBook(albumBook.id);
+    }
+  }, [albumBook?.id, albumBook?.isPublished]);
 
   const readUrl = albumBook ? bookPublicUrl(albumBook.publicSlug) : '';
 

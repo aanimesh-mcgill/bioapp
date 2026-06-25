@@ -432,8 +432,32 @@ export async function assignStoryToBook(
 }
 
 export async function publishBook(bookId: string, publish: boolean) {
+  const bookSnap = await getDoc(doc(db, 'books', bookId));
+  const collabBookId = bookSnap.data()?.collabBookId as string | undefined;
+
   await updateDoc(doc(db, 'books', bookId), {
     isPublished: publish,
+    updatedAt: serverTimestamp(),
+  });
+
+  if (collabBookId) {
+    await updateDoc(doc(db, 'collabBooks', collabBookId), {
+      publishedAlbumBookId: publish ? bookId : null,
+      updatedAt: serverTimestamp(),
+    });
+  } else if (publish) {
+    await syncPublishedAlbumLinkForBook(bookId);
+  }
+}
+
+/** Backfill collabBooks.publishedAlbumBookId for albums that were published before linking existed. */
+export async function syncPublishedAlbumLinkForBook(bookId: string): Promise<void> {
+  const bookSnap = await getDoc(doc(db, 'books', bookId));
+  if (!bookSnap.exists() || bookSnap.data()?.isPublished !== true) return;
+  const collabBookId = bookSnap.data()?.collabBookId as string | undefined;
+  if (!collabBookId) return;
+  await updateDoc(doc(db, 'collabBooks', collabBookId), {
+    publishedAlbumBookId: bookId,
     updatedAt: serverTimestamp(),
   });
 }

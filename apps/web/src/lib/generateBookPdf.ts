@@ -109,10 +109,20 @@ async function renderBookPdfDoc(
       const clips = page.kind === 'spread' ? clipsForSpread(page, clipsByStory) : [];
       let qrDataUrl: string | null = null;
 
-      if (clips.length > 0) {
+      if (clips.length > 0 && page.storyId) {
+        const spreadPageIndex = printablePages.findIndex(
+          (p) =>
+            p.kind === 'spread' &&
+            p.storyId === page.storyId &&
+            (page.blockId ? p.blockId === page.blockId : true),
+        );
         const url = spreadPublicUrl(
           book.publicSlug,
-          { storyId: page.storyId, blockId: page.blockId, pageIndex },
+          {
+            storyId: page.storyId,
+            blockId: page.blockId,
+            pageIndex: spreadPageIndex >= 0 ? spreadPageIndex : pageIndex,
+          },
           { play: true },
         );
         qrDataUrl = await qrCodeDataUrl(url, 200);

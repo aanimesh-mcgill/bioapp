@@ -3,7 +3,7 @@ import { useParams, Link, useSearchParams, useLocation } from 'react-router-dom'
 import { AlbumBookViewer } from '@/components/AlbumBookViewer';
 import { BilingualBtn } from '@/components/BilingualText';
 import { usePickText } from '@/context/UiLocaleContext';
-import { buildAlbumPages, indexClipsByStory, resolveSpreadPageIndex } from '@/lib/albumPages';
+import { buildAlbumPages, filterBlankAlbumPages, indexClipsByStory, resolveSpreadPageIndex } from '@/lib/albumPages';
 import { bookPublicUrl, chapterPublicUrl, storyPublicUrl } from '@/lib/slug';
 import { getPublishedBookData, getStoryByPublicSlug } from '@/services/books';
 import type { AudioClip, Book, Chapter, StorySession } from '@/types';
@@ -54,6 +54,7 @@ export function PublicBookPage() {
   const spreadStoryId = searchParams.get('story');
   const spreadBlockId = searchParams.get('block');
   const spreadPage = searchParams.get('page');
+  const autoPlay = searchParams.get('play') === '1';
   const [book, setBook] = useState<Book | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [stories, setStories] = useState<StorySession[]>([]);
@@ -114,7 +115,10 @@ export function PublicBookPage() {
   const pages = useMemo(
     () =>
       book
-        ? buildAlbumPages(book, scoped.chapters, scoped.stories, clipsByStory, { preview: false })
+        ? filterBlankAlbumPages(
+            buildAlbumPages(book, scoped.chapters, scoped.stories, clipsByStory, { preview: false }),
+            clipsByStory,
+          )
         : [],
     [book, scoped.chapters, scoped.stories, clipsByStory],
   );
@@ -195,6 +199,7 @@ export function PublicBookPage() {
       clipsByStory={clipsByStory}
       mode="public"
       initialPageIndex={initialPageIndex}
+      autoPlayAudiobook={autoPlay}
       shareUrl={shareUrl}
       shareTitle={shareTitle}
       backLink={

@@ -60,8 +60,36 @@ service firebase.storage {
     }
 
     // Story session clips and images
+    function storySessionDoc(sessionId) {
+      return firestore.get(/databases/(default)/documents/storySessions/$(sessionId));
+    }
+
+    function isPublishedStorySession(sessionId) {
+      let story = storySessionDoc(sessionId);
+      return story.data != null && (
+        (story.data.bookId != null
+          && firestore.get(/databases/(default)/documents/books/$(story.data.bookId)).data.isPublished == true)
+        || (story.data.collabBookId != null
+          && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.collabBookId))
+          && firestore.get(/databases/(default)/documents/collabBooks/$(story.data.collabBookId)).data.publishedAlbumBookId != null
+          && firestore.get(
+            /databases/(default)/documents/books/$(
+              firestore.get(/databases/(default)/documents/collabBooks/$(story.data.collabBookId)).data.publishedAlbumBookId
+            )
+          ).data.isPublished == true)
+        || (story.data.chapterId != null
+          && firestore.exists(/databases/(default)/documents/chapters/$(story.data.chapterId))
+          && firestore.get(
+            /databases/(default)/documents/books/$(
+              firestore.get(/databases/(default)/documents/chapters/$(story.data.chapterId)).data.bookId
+            )
+          ).data.isPublished == true)
+      );
+    }
+
     match /stories/{userId}/{sessionId}/clips/{clipId}/{fileName} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow read: if (isSignedIn() && request.auth.uid == userId)
+        || isPublishedStorySession(sessionId);
       allow write: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.size < 50 * 1024 * 1024
@@ -69,7 +97,8 @@ service firebase.storage {
     }
 
     match /stories/{userId}/{sessionId}/images/{fileName} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow read: if (isSignedIn() && request.auth.uid == userId)
+        || isPublishedStorySession(sessionId);
       allow write: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.size < 20 * 1024 * 1024
