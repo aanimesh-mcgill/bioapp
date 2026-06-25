@@ -398,6 +398,43 @@ export async function linkStoryToCollabAlbum(
   });
 }
 
+/** Backfill story access fields so Storage rules allow album owners to read contributor images. */
+export async function ensureStoriesLinkedForPdfExport(
+  albumBook: Book,
+  stories: StorySession[],
+): Promise<number> {
+  if (!albumBook.id || !albumBook.userId) return 0;
+
+  const batch = writeBatch(db);
+  let pending = 0;
+
+  for (const story of stories) {
+    const patch: Record<string, unknown> = {};
+    const fromOtherUser = story.userId !== albumBook.userId;
+
+    if (fromOtherUser && story.bookOwnerId !== albumBook.userId) {
+      patch.bookOwnerId = albumBook.userId;
+    }
+    if (albumBook.collabBookId && story.collabBookId !== albumBook.collabBookId) {
+      patch.collabBookId = albumBook.collabBookId;
+    }
+    if (story.bookId !== albumBook.id) {
+      patch.bookId = albumBook.id;
+    }
+
+    if (Object.keys(patch).length === 0) continue;
+
+    patch.updatedAt = serverTimestamp();
+    batch.update(doc(db, 'storySessions', story.id), patch);
+    pending += 1;
+  }
+
+  if (pending === 0) return 0;
+  await batch.commit();
+  console.info('[PDF] backfilled story access fields for', pending, 'stories');
+  return pending;
+}
+
 export async function assignStoryToBook(
   storyId: string,
   bookId: string,

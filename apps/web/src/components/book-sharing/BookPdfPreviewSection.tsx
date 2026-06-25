@@ -11,7 +11,7 @@ import {
 } from '@/lib/pdfOverrides';
 import { buildBookPdfBlob, downloadSavedBookPdf, type PdfBuildProgress } from '@/lib/generateBookPdf';
 import { formatPdfErrorForUi, logPdfError, PdfOperationError } from '@/lib/pdfErrors';
-import { getBookPreviewData } from '@/services/books';
+import { getBookPreviewData, ensureStoriesLinkedForPdfExport } from '@/services/books';
 import {
   isSavedPdfStale,
   saveBookPdf,
@@ -146,6 +146,8 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
     setPdfProgress('');
     try {
       await savePdfOverrides(albumBook.id, cleanedOverrides());
+      setPdfProgress('Preparing stories…');
+      await ensureStoriesLinkedForPdfExport(albumBook, stories);
       setPdfProgress('Building PDF…');
       const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory, (p: PdfBuildProgress) => {
         if (p.stage === 'images') setPdfProgress(p.detail ?? 'Loading images…');
@@ -182,6 +184,8 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
       if (albumBook.id) {
         await savePdfOverrides(albumBook.id, cleanedOverrides());
       }
+      setPdfProgress('Preparing stories…');
+      await ensureStoriesLinkedForPdfExport(albumBook, stories);
       setPdfProgress('Building preview…');
       const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory, (p: PdfBuildProgress) => {
         if (p.stage === 'images') setPdfProgress(p.detail ?? 'Loading images…');

@@ -74,23 +74,33 @@ export async function fetchImageAsDataUrl(
   if (storagePath) {
     const fromPath = await fetchViaStoragePath(storagePath, pageLabel);
     if (fromPath.dataUrl) return fromPath;
-    if (fromPath.failure) {
-      const fromSdk = await fetchViaStorageSdk(url, pageLabel);
-      if (fromSdk.dataUrl) return fromSdk;
-      return { dataUrl: null, failure: fromPath.failure };
+    if (url) {
+      const viaHttp = await fetchViaHttp(url);
+      if (viaHttp) {
+        console.info('[PDF image] loaded via HTTP fallback:', pageLabel ?? storagePath);
+        return { dataUrl: viaHttp };
+      }
     }
+    if (fromPath.failure) return { dataUrl: null, failure: fromPath.failure };
   }
   const fromSdk = await fetchViaStorageSdk(url, pageLabel);
   if (fromSdk.dataUrl) return fromSdk;
-  if (fromSdk.failure) return fromSdk;
+  if (url && fromSdk.failure) {
+    const viaHttp = await fetchViaHttp(url);
+    if (viaHttp) {
+      console.info('[PDF image] loaded via HTTP fallback:', pageLabel ?? url.slice(0, 80));
+      return { dataUrl: viaHttp };
+    }
+    return { dataUrl: null, failure: fromSdk.failure };
+  }
   if (storagePathFromFirebaseUrl(url)) {
     return {
       dataUrl: null,
-      failure: {
+      failure: fromSdk.failure ?? {
         url,
         pageLabel,
-        code: 'storage/skipped-http',
-        message: 'Skipped unauthenticated HTTP fetch for Firebase Storage URL after SDK failed.',
+        code: 'image/load-failed',
+        message: 'Storage SDK and HTTP fetch both failed.',
       },
     };
   }
