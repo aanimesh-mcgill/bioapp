@@ -15,7 +15,8 @@
     "functions:build": "npm run build --workspace=functions",
     "functions:serve": "npm run serve --workspace=functions",
     "firebase:emulator": "firebase emulators:start",
-    "firebase:deploy": "firebase deploy"
+    "firebase:deploy": "firebase deploy",
+    "storage:cors": "gcloud storage buckets update gs://autobio-b5dbf.firebasestorage.app --cors-file=cors.json"
   },
   "engines": {
     "node": ">=20"

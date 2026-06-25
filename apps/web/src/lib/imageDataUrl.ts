@@ -38,7 +38,8 @@ async function fetchViaStoragePath(path: string): Promise<string | null> {
   try {
     const blob = await getBlob(ref(storage, path));
     return blobToDataUrl(blob);
-  } catch {
+  } catch (err) {
+    console.warn('Storage SDK image load failed:', path, err);
     return null;
   }
 }
@@ -49,10 +50,19 @@ async function fetchViaStorageSdk(url: string): Promise<string | null> {
   return fetchViaStoragePath(path);
 }
 
-/** Load a remote image as a data URL for canvas/PDF export. */
-export async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+/** Load a remote image as a data URL for canvas/PDF export (Storage SDK first). */
+export async function fetchImageAsDataUrl(
+  url: string,
+  storagePath?: string,
+): Promise<string | null> {
   if (!url || url.startsWith('data:')) return url;
-  return (await fetchViaHttp(url)) ?? (await fetchViaStorageSdk(url));
+  if (storagePath) {
+    const fromPath = await fetchViaStoragePath(storagePath);
+    if (fromPath) return fromPath;
+  }
+  const fromSdk = await fetchViaStorageSdk(url);
+  if (fromSdk) return fromSdk;
+  return fetchViaHttp(url);
 }
 
 export type ImageResolveInput = {
@@ -60,29 +70,28 @@ export type ImageResolveInput = {
   storagePath?: string;
 };
 
-/** Resolve album images for PDF export using download URLs and storage paths. */
 export async function resolveImagesForPdf(
   inputs: ImageResolveInput[],
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   const seen = new Set<string>();
 
-  for (const input of inputs) {
+  const unique = inputs.filter((input) => {
     const dedupeKey = `${input.url ?? ''}|${input.storagePath ?? ''}`;
-    if (seen.has(dedupeKey)) continue;
+    if (seen.has(dedupeKey)) return false;
     seen.add(dedupeKey);
+    return Boolean(input.url || input.storagePath);
+  });
 
-    let dataUrl: string | null = null;
-    if (input.url) dataUrl = await fetchImageAsDataUrl(input.url);
-    if (!dataUrl && input.storagePath) dataUrl = await fetchViaStoragePath(input.storagePath);
-    if (!dataUrl && input.url) {
-      const derivedPath = storagePathFromFirebaseUrl(input.url);
-      if (derivedPath && derivedPath !== input.storagePath) {
-        dataUrl = await fetchViaStoragePath(derivedPath);
-      }
-    }
+  const settled = await Promise.all(
+    unique.map(async (input) => {
+      const dataUrl = await fetchImageAsDataUrl(input.url ?? '', input.storagePath);
+      return { input, dataUrl };
+    }),
+  );
+
+  for (const { input, dataUrl } of settled) {
     if (!dataUrl) continue;
-
     if (input.url) result.set(input.url, dataUrl);
     if (input.storagePath) result.set(input.storagePath, dataUrl);
   }

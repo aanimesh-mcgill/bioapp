@@ -35,10 +35,20 @@ function renderPageToDom(
 ): Promise<ReturnType<typeof createRoot>> {
   return new Promise((resolve) => {
     const root = createRoot(container);
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve(root);
+    };
+    const timer = window.setTimeout(finish, 20_000);
     root.render(
       createElement(AlbumPdfPage, {
         ...props,
-        onReady: () => resolve(root),
+        onReady: () => {
+          window.clearTimeout(timer);
+          finish();
+        },
       }),
     );
   });

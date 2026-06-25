@@ -165,14 +165,21 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
         setPdfPreviewUrl(savedPdf.url);
         return;
       }
-      await handleSave();
+      if (albumBook.id) {
+        await savePdfOverrides(albumBook.id, cleanedOverrides());
+      }
       const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory);
       const nextUrl = URL.createObjectURL(blob);
       if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(nextUrl);
     } catch (err) {
       console.error(err);
-      setActionError(t({ en: 'Could not preview PDF.', hi: 'PDF पूर्वावलोकन विफल।' }));
+      setActionError(
+        t({
+          en: 'Could not preview PDF. Check that photos load and try again.',
+          hi: 'PDF पूर्वावलोकन विफल। फोटो लोड हो रही हैं यह जाँचें और फिर कोशिश करें।',
+        }),
+      );
     } finally {
       setPdfLoading(false);
     }
