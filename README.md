@@ -86,7 +86,7 @@ firebase emulators:start
 
 | Secret / variable | Description |
 |-------------------|-------------|
-| `Firebase` (repo variable) or `FIREBASE_TOKEN` (secret) | CI token from `firebase login:ci` |
+| `Firebase` | CI token from `firebase login:ci` (repo secret) |
 | `VITE_FIREBASE_API_KEY` | Firebase web API key |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | For Cloud Run deploy (optional) |
 | `GCP_SERVICE_ACCOUNT` | GCP service account email (optional) |
