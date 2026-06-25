@@ -93,11 +93,12 @@ service firebase.storage {
       return !isBookPhotoSession(sessionId)
         && story.data != null
         && (
-          (story.data.collabBookId != null && isCollabBookMember(story.data.collabBookId))
+          (story.data.bookOwnerId != null && story.data.bookOwnerId == request.auth.uid)
+          || (story.data.collabBookId != null && isCollabBookMember(story.data.collabBookId))
+          || (story.data.bookId != null && isAlbumBookOwner(story.data.bookId))
           || (story.data.bookId != null
             && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.bookId))
             && isCollabBookMember(story.data.bookId))
-          || (story.data.bookId != null && isAlbumBookOwner(story.data.bookId))
         );
     }
 
