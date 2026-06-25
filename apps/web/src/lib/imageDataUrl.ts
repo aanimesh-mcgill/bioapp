@@ -62,6 +62,8 @@ export async function fetchImageAsDataUrl(
   }
   const fromSdk = await fetchViaStorageSdk(url);
   if (fromSdk) return fromSdk;
+  // Avoid unauthenticated HTTP fetches to Storage download URLs (403 + console noise).
+  if (storagePathFromFirebaseUrl(url)) return null;
   return fetchViaHttp(url);
 }
 

@@ -60,6 +60,15 @@ service firebase.storage {
       return isAlbumBookOwner(bookId) || isLinkedAlbumBook(bookId);
     }
 
+    function bookPhotoCollabId(sessionId) {
+      return sessionId.split('book-photos-')[1];
+    }
+
+    function canReadBookPhotoSession(sessionId) {
+      return sessionId.matches('book-photos-.*')
+        && isCollabBookMember(bookPhotoCollabId(sessionId));
+    }
+
     function storySessionDoc(sessionId) {
       return firestore.get(/databases/(default)/documents/storySessions/$(sessionId));
     }
@@ -69,12 +78,20 @@ service firebase.storage {
       return story.data != null && (
         (story.data.collabBookId != null && isCollabBookMember(story.data.collabBookId))
         || (story.data.bookId != null
+          && firestore.exists(/databases/(default)/documents/collabBooks/$(story.data.bookId))
+          && isCollabBookMember(story.data.bookId))
+        || (story.data.bookId != null
           && firestore.exists(/databases/(default)/documents/books/$(story.data.bookId))
           && isAlbumBookOwner(story.data.bookId))
         || (story.data.bookId != null
           && firestore.exists(/databases/(default)/documents/books/$(story.data.bookId))
           && albumBook(story.data.bookId).data.collabBookId != null
           && isCollabBookMember(albumBook(story.data.bookId).data.collabBookId))
+        || (story.data.chapterId != null
+          && firestore.exists(/databases/(default)/documents/chapters/$(story.data.chapterId))
+          && canAccessAlbumBook(
+            firestore.get(/databases/(default)/documents/chapters/$(story.data.chapterId)).data.bookId
+          ))
       );
     }
 
@@ -124,7 +141,8 @@ service firebase.storage {
     match /stories/{userId}/{sessionId}/images/{fileName} {
       allow read: if (isSignedIn() && request.auth.uid == userId)
         || isPublishedStorySession(sessionId)
-        || canReadStorySession(sessionId);
+        || canReadStorySession(sessionId)
+        || canReadBookPhotoSession(sessionId);
       allow write: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.size < 20 * 1024 * 1024
