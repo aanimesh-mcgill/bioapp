@@ -9,7 +9,8 @@ import {
   type PdfOverrides,
   type PdfSpreadOverride,
 } from '@/lib/pdfOverrides';
-import { buildBookPdfBlob, downloadSavedBookPdf } from '@/lib/generateBookPdf';
+import { buildBookPdfBlob, downloadSavedBookPdf, type PdfBuildProgress } from '@/lib/generateBookPdf';
+import { formatPdfErrorForUi, logPdfError, PdfOperationError } from '@/lib/pdfErrors';
 import { getBookPreviewData } from '@/services/books';
 import {
   isSavedPdfStale,
@@ -44,6 +45,7 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [pdfProgress, setPdfProgress] = useState('');
 
   useEffect(() => {
     if (!user || !albumBook.id) {
@@ -141,16 +143,27 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
     if (!albumBook.id) return;
     setSavingPdf(true);
     setActionError('');
+    setPdfProgress('');
     try {
       await savePdfOverrides(albumBook.id, cleanedOverrides());
-      const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory);
+      setPdfProgress('Building PDF…');
+      const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory, (p: PdfBuildProgress) => {
+        if (p.stage === 'images') setPdfProgress(p.detail ?? 'Loading images…');
+        else if (p.stage === 'render' && p.current != null && p.total != null) {
+          setPdfProgress(`Rendering page ${p.current}/${p.total}…`);
+        }
+      });
+      setPdfProgress('Uploading PDF…');
       const meta = await saveBookPdf(albumBook.id, blob);
       setSavedPdf(meta);
       if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(meta.url);
+      setPdfProgress('');
     } catch (err) {
-      console.error(err);
-      setActionError(t({ en: 'Could not save PDF.', hi: 'PDF सहेजी नहीं जा सकी।' }));
+      const stage = err instanceof PdfOperationError ? err.stage : 'upload';
+      logPdfError(stage, 'Save PDF failed', err);
+      setActionError(formatPdfErrorForUi(err));
+      setPdfProgress('');
     } finally {
       setSavingPdf(false);
     }
@@ -159,6 +172,7 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
   const handlePreviewPdf = async () => {
     setPdfLoading(true);
     setActionError('');
+    setPdfProgress('');
     try {
       if (savedPdf?.url && !pdfStale) {
         if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
@@ -168,18 +182,21 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
       if (albumBook.id) {
         await savePdfOverrides(albumBook.id, cleanedOverrides());
       }
-      const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory);
+      setPdfProgress('Building preview…');
+      const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory, (p: PdfBuildProgress) => {
+        if (p.stage === 'images') setPdfProgress(p.detail ?? 'Loading images…');
+        else if (p.stage === 'render' && p.current != null && p.total != null) {
+          setPdfProgress(`Rendering page ${p.current}/${p.total}…`);
+        }
+      });
       const nextUrl = URL.createObjectURL(blob);
       if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(nextUrl);
+      setPdfProgress('');
     } catch (err) {
-      console.error(err);
-      setActionError(
-        t({
-          en: 'Could not preview PDF. Check that photos load and try again.',
-          hi: 'PDF पूर्वावलोकन विफल। फोटो लोड हो रही हैं यह जाँचें और फिर कोशिश करें।',
-        }),
-      );
+      logPdfError('render', 'Preview PDF failed', err);
+      setActionError(formatPdfErrorForUi(err));
+      setPdfProgress('');
     } finally {
       setPdfLoading(false);
     }
@@ -201,8 +218,8 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
     try {
       await downloadSavedBookPdf(albumBook, url);
     } catch (err) {
-      console.error(err);
-      setActionError(t({ en: 'Could not download PDF.', hi: 'PDF डाउनलोड विफल।' }));
+      logPdfError('download', 'Download PDF failed', err);
+      setActionError(formatPdfErrorForUi(err));
     } finally {
       setPdfLoading(false);
     }
@@ -369,7 +386,15 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
         </button>
       </div>
 
-      {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+      {pdfProgress && (
+        <p className="text-sm text-amber-800">{pdfProgress}</p>
+      )}
+
+      {actionError && (
+        <pre className="whitespace-pre-wrap rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          {actionError}
+        </pre>
+      )}
 
       {!albumBook.isPublished && (
         <p className={`text-xs text-amber-700 ${locale === 'hi' ? 'font-hindi' : ''}`}>

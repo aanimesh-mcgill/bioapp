@@ -69,8 +69,19 @@ service firebase.storage {
     }
 
     function canReadBookPhotoSession(sessionId) {
+      let collabId = bookPhotoCollabId(sessionId);
       return isBookPhotoSession(sessionId)
-        && isCollabBookMember(bookPhotoCollabId(sessionId));
+        && (
+          isCollabBookMember(collabId)
+          || isAlbumOwnerForCollab(collabId)
+        );
+    }
+
+    function isAlbumOwnerForCollab(collabId) {
+      let collab = collabBook(collabId);
+      return collab.data != null
+        && collab.data.publishedAlbumBookId != null
+        && isAlbumBookOwner(collab.data.publishedAlbumBookId);
     }
 
     function storySessionDoc(sessionId) {
