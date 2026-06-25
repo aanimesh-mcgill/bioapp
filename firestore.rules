@@ -268,7 +268,7 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId) || isAdmin();
 
       match /private/{docId} {
-        allow read, write: if isAlbumBookOwner(bookId) || isAdmin();
+        allow read, write: if canAccessAlbumBook(bookId) || isAdmin();
       }
 
     }

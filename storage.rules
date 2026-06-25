@@ -50,6 +50,16 @@ service firebase.storage {
         );
     }
 
+    function isLinkedAlbumBook(bookId) {
+      return albumBook(bookId).data != null
+        && albumBook(bookId).data.collabBookId != null
+        && isCollabBookMember(albumBook(bookId).data.collabBookId);
+    }
+
+    function canAccessAlbumBook(bookId) {
+      return isAlbumBookOwner(bookId) || isLinkedAlbumBook(bookId);
+    }
+
     function storySessionDoc(sessionId) {
       return firestore.get(/databases/(default)/documents/storySessions/$(sessionId));
     }
@@ -144,8 +154,8 @@ service firebase.storage {
     }
 
     match /album-books/{bookId}/{fileName} {
-      allow read: if isPublishedAlbumBook(bookId) || isAlbumBookOwner(bookId);
-      allow write: if isAlbumBookOwner(bookId)
+      allow read: if isPublishedAlbumBook(bookId) || canAccessAlbumBook(bookId);
+      allow write: if canAccessAlbumBook(bookId)
         && request.resource.size < 100 * 1024 * 1024
         && isValidPdf();
     }
