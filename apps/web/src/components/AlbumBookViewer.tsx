@@ -520,7 +520,8 @@ export function AlbumBookViewer({
                   <SpreadClipPlayer
                     key={pageIndex}
                     clips={spreadClips}
-                    autoPlay
+                    autoPlay={audiobookMode}
+                    sticky={mode === 'public' && audiobookMode}
                     onQueueComplete={audiobookMode ? handleSpreadClipsComplete : undefined}
                   />
                 </div>
