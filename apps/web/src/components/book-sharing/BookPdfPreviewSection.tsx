@@ -9,9 +9,15 @@ import {
   type PdfOverrides,
   type PdfSpreadOverride,
 } from '@/lib/pdfOverrides';
-import { buildBookPdfBlob, downloadBookPdfBlob } from '@/lib/generateBookPdf';
+import { buildBookPdfBlob, downloadSavedBookPdf } from '@/lib/generateBookPdf';
 import { getBookPreviewData } from '@/services/books';
-import { savePdfOverrides, subscribeToPdfOverrides } from '@/services/bookPdfSettings';
+import {
+  isSavedPdfStale,
+  saveBookPdf,
+  savePdfOverrides,
+  subscribeToPdfDraft,
+  type SavedBookPdfMeta,
+} from '@/services/bookPdfSettings';
 import type { AlbumSpread } from '@/lib/albumPages';
 import type { AudioClip, Book, Chapter, StorySession } from '@/types';
 
@@ -30,11 +36,14 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
   const [stories, setStories] = useState<StorySession[]>([]);
   const [clips, setClips] = useState<AudioClip[]>([]);
   const [overrides, setOverrides] = useState<PdfOverrides>({});
+  const [savedPdf, setSavedPdf] = useState<SavedBookPdfMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingPdf, setSavingPdf] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     if (!user || !albumBook.id) {
@@ -54,12 +63,15 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
 
   useEffect(() => {
     if (!albumBook.id) return;
-    return subscribeToPdfOverrides(albumBook.id, setOverrides);
+    return subscribeToPdfDraft(albumBook.id, (draft) => {
+      setOverrides(draft.overrides);
+      setSavedPdf(draft.savedPdf);
+    });
   }, [albumBook.id]);
 
   useEffect(() => {
     return () => {
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
     };
   }, [pdfPreviewUrl]);
 
@@ -83,6 +95,8 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
     [basePages],
   );
 
+  const pdfStale = isSavedPdfStale(savedPdf);
+
   useEffect(() => {
     if (spreadPages.length === 0) {
       setSelectedKey(null);
@@ -104,38 +118,84 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
     });
   };
 
+  const cleanedOverrides = () =>
+    Object.fromEntries(
+      Object.entries(overrides).filter(([, value]) => value && Object.keys(value).length > 0),
+    );
+
   const handleSave = async () => {
     if (!albumBook.id) return;
     setSaving(true);
+    setActionError('');
     try {
-      const cleaned = Object.fromEntries(
-        Object.entries(overrides).filter(([, value]) => value && Object.keys(value).length > 0),
-      );
-      await savePdfOverrides(albumBook.id, cleaned);
+      await savePdfOverrides(albumBook.id, cleanedOverrides());
+    } catch (err) {
+      console.error(err);
+      setActionError(t({ en: 'Could not save edits.', hi: 'संपादन सहेजे नहीं जा सके।' }));
     } finally {
       setSaving(false);
     }
   };
 
+  const handleSavePdf = async () => {
+    if (!albumBook.id) return;
+    setSavingPdf(true);
+    setActionError('');
+    try {
+      await savePdfOverrides(albumBook.id, cleanedOverrides());
+      const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory);
+      const meta = await saveBookPdf(albumBook.id, blob);
+      setSavedPdf(meta);
+      if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(meta.url);
+    } catch (err) {
+      console.error(err);
+      setActionError(t({ en: 'Could not save PDF.', hi: 'PDF सहेजी नहीं जा सकी।' }));
+    } finally {
+      setSavingPdf(false);
+    }
+  };
+
   const handlePreviewPdf = async () => {
     setPdfLoading(true);
+    setActionError('');
     try {
+      if (savedPdf?.url && !pdfStale) {
+        if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
+        setPdfPreviewUrl(savedPdf.url);
+        return;
+      }
       await handleSave();
       const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory);
       const nextUrl = URL.createObjectURL(blob);
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      if (pdfPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(nextUrl);
+    } catch (err) {
+      console.error(err);
+      setActionError(t({ en: 'Could not preview PDF.', hi: 'PDF पूर्वावलोकन विफल।' }));
     } finally {
       setPdfLoading(false);
     }
   };
 
   const handleDownloadPdf = async () => {
+    const url = savedPdf?.url ?? albumBook.savedPdfUrl;
+    if (!url) {
+      setActionError(
+        t({
+          en: 'Save the PDF first. Downloads use your saved file instead of generating a new one each time.',
+          hi: 'पहले PDF सहेजें। डाउनलोड हर बार नई PDF बनाने के बजाय आपकी सहेजी फ़ाइल का उपयोग करते हैं।',
+        }),
+      );
+      return;
+    }
     setPdfLoading(true);
+    setActionError('');
     try {
-      await handleSave();
-      const blob = await buildBookPdfBlob(albumBook, pdfPages, clipsByStory);
-      downloadBookPdfBlob(albumBook, blob);
+      await downloadSavedBookPdf(albumBook, url);
+    } catch (err) {
+      console.error(err);
+      setActionError(t({ en: 'Could not download PDF.', hi: 'PDF डाउनलोड विफल।' }));
     } finally {
       setPdfLoading(false);
     }
@@ -168,6 +228,7 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
   const displayTitle = selectedOverride.imageTitle ?? selected.page.imageTitle ?? '';
   const displayDate = selectedOverride.dateLabel ?? selected.page.dateLabel ?? '';
   const isExcluded = Boolean(selectedOverride.excluded);
+  const hasSavedPdf = Boolean(savedPdf?.url ?? albumBook.savedPdfUrl);
 
   return (
     <section className="card space-y-4">
@@ -176,12 +237,26 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
           {t({ en: 'PDF preview & edit', hi: 'PDF पूर्वावलोकन और संपादन' })}
         </h2>
         <BilingualLine
-          en="Edit text for each page below. Preview and download use your saved edits."
-          hi="नीचे प्रत्येक पृष्ठ का पाठ संपादित करें। पूर्वावलोकन और डाउनलोड आपके सहेजे गए संपादन का उपयोग करते हैं।"
+          en="Edit page text, then save the PDF once. Everyone downloads that saved file."
+          hi="पृष्ठ पाठ संपादित करें, फिर PDF एक बार सहेजें। सभी वही सहेजी फ़ाइल डाउनलोड करेंगे।"
           enClass="mt-1 text-sm text-heritage-muted"
           hiClass="text-sm text-heritage-muted"
         />
       </div>
+
+      {hasSavedPdf && (
+        <p className={`text-xs ${pdfStale ? 'text-amber-700' : 'text-emerald-700'} ${locale === 'hi' ? 'font-hindi' : ''}`}>
+          {pdfStale
+            ? t({
+                en: 'Edits changed since the last saved PDF. Save PDF again to update downloads.',
+                hi: 'पिछली सहेजी PDF के बाद संपादन बदले हैं। डाउनलोड अपडेट करने के लिए PDF फिर सहेजें।',
+              })
+            : t({
+                en: 'A saved PDF is ready for download.',
+                hi: 'सहेजी PDF डाउनलोड के लिए तैयार है।',
+              })}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {spreadPages.map((entry) => {
@@ -254,7 +329,7 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
         <button
           type="button"
           className="btn-secondary"
-          disabled={saving}
+          disabled={saving || savingPdf}
           onClick={handleSave}
         >
           {saving ? t({ en: 'Saving…', hi: 'सहेज रहे हैं…' }) : t({ en: 'Save edits', hi: 'संपादन सहेजें' })}
@@ -262,20 +337,32 @@ export function BookPdfPreviewSection({ albumBook }: { albumBook: Book }) {
         <button
           type="button"
           className="btn-primary flex-1"
-          disabled={pdfLoading || pdfPages.length === 0}
-          onClick={handlePreviewPdf}
+          disabled={savingPdf || pdfLoading || pdfPages.length === 0}
+          onClick={handleSavePdf}
         >
-          {pdfLoading ? t({ en: 'Generating…', hi: 'बना रहे हैं…' }) : t({ en: 'Preview PDF', hi: 'PDF देखें' })}
+          {savingPdf
+            ? t({ en: 'Saving PDF…', hi: 'PDF सहेज रहे हैं…' })
+            : t({ en: 'Save PDF', hi: 'PDF सहेजें' })}
         </button>
         <button
           type="button"
           className="btn-secondary flex-1"
-          disabled={pdfLoading || pdfPages.length === 0}
+          disabled={pdfLoading || savingPdf || pdfPages.length === 0}
+          onClick={handlePreviewPdf}
+        >
+          {pdfLoading ? t({ en: 'Loading…', hi: 'लोड हो रहा है…' }) : t({ en: 'Preview PDF', hi: 'PDF देखें' })}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary flex-1"
+          disabled={pdfLoading || savingPdf || !hasSavedPdf}
           onClick={handleDownloadPdf}
         >
           <BilingualBtn en="Download PDF" hi="PDF डाउनलोड" />
         </button>
       </div>
+
+      {actionError && <p className="text-sm text-red-600">{actionError}</p>}
 
       {!albumBook.isPublished && (
         <p className={`text-xs text-amber-700 ${locale === 'hi' ? 'font-hindi' : ''}`}>

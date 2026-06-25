@@ -56,12 +56,18 @@ export function AlbumPdfPage({ book, page, pages, clips, qrDataUrl, onReady }: A
     const waits = [...imgs].map((img) => {
       if (img.complete && img.naturalWidth > 0) return Promise.resolve();
       return new Promise<void>((resolve) => {
-        img.onload = () => resolve();
-        img.onerror = () => resolve();
+        const done = () => resolve();
+        img.onload = done;
+        img.onerror = done;
       });
     });
-    void Promise.all(waits).then(() => {
-      requestAnimationFrame(() => onReady?.());
+    void Promise.all(waits).then(async () => {
+      await document.fonts.ready;
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 80));
+      onReady?.();
     });
   }, [onReady, page, qrDataUrl, clips.length]);
 
@@ -71,7 +77,7 @@ export function AlbumPdfPage({ book, page, pages, clips, qrDataUrl, onReady }: A
       style={{ width: PDF_PAGE_W, height: PDF_PAGE_H }}
       className="box-border flex bg-[#f4ebe0] p-10"
     >
-      <div className="flex min-h-0 w-full max-w-[680px] flex-1 flex-col overflow-hidden rounded-sm bg-[#fffef9] shadow-[0_8px_40px_-12px_rgba(120,80,40,0.35),inset_0_0_0_1px_rgba(180,140,90,0.15)]">
+      <div className="flex min-h-0 w-full max-w-[680px] flex-1 flex-col rounded-sm bg-[#fffef9] shadow-[0_8px_40px_-12px_rgba(120,80,40,0.35),inset_0_0_0_1px_rgba(180,140,90,0.15)]">
         {children}
       </div>
     </div>
@@ -143,25 +149,28 @@ export function AlbumPdfPage({ book, page, pages, clips, qrDataUrl, onReady }: A
         ? page.bodyText.split('\n\n')[0]?.slice(0, 280)
         : '';
     const bodyClass = textFontClass(page.bodyText ?? lead ?? '');
+    const hindiBody = hasDevanagari(body ?? lead ?? '');
     const hasQr = clips.length > 0 && Boolean(qrDataUrl);
+    const bodyLineHeight = hindiBody ? 1.95 : 1.75;
 
     return shell(
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-8">
-        <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col p-8">
+        <div className="min-h-0 flex-1">
           {page.chapterTitle && (
             <p className="mb-1 text-[10px] uppercase tracking-widest text-amber-700/55">{page.chapterTitle}</p>
           )}
 
           {page.blockType === 'image' && page.imageUrl && (
-            <figure className={`mx-auto w-full ${hasQr ? 'mb-3 max-w-xs' : 'mb-6 max-w-md'}`}>
+            <figure className={`mx-auto w-full ${hasQr ? 'mb-3 max-w-[240px]' : 'mb-5 max-w-md'}`}>
               <div className="rounded-sm bg-white p-3 pb-4 shadow-[0_4px_24px_-4px_rgba(80,50,20,0.25)] ring-1 ring-amber-100">
                 <img
                   src={page.imageUrl}
                   alt={page.imageTitle ?? ''}
+                  crossOrigin={page.imageUrl.startsWith('data:') ? undefined : 'anonymous'}
                   className={
                     hasQr
-                      ? 'mx-auto max-h-[200px] w-full rounded-sm object-contain'
-                      : 'mx-auto max-h-[min(65dvh,520px)] w-full rounded-sm object-contain'
+                      ? 'mx-auto max-h-[150px] w-full rounded-sm object-contain'
+                      : 'mx-auto max-h-[300px] w-full rounded-sm object-contain'
                   }
                 />
                 {(page.imageTitle || page.dateLabel) && (
@@ -188,9 +197,12 @@ export function AlbumPdfPage({ book, page, pages, clips, qrDataUrl, onReady }: A
             <div
               className={`mx-auto max-w-prose whitespace-pre-wrap text-amber-950/85 ${bodyClass} ${
                 hasQr
-                  ? `overflow-hidden leading-[1.6] ${page.blockType === 'image' ? 'max-h-[220px] text-[13px]' : 'max-h-[420px] text-[14px]'}`
-                  : 'text-[15px] leading-[1.75]'
+                  ? page.blockType === 'image'
+                    ? 'text-[12px]'
+                    : 'text-[13px]'
+                  : 'text-[15px]'
               }`}
+              style={{ lineHeight: bodyLineHeight }}
             >
               {body}
             </div>

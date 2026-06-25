@@ -13,6 +13,7 @@ export interface AlbumSpread {
   blockId?: string;
   blockType?: 'image' | 'text';
   imageUrl?: string;
+  imageStoragePath?: string;
   imageTitle?: string;
   dateLabel?: string;
   bodyText?: string;
@@ -157,6 +158,7 @@ function spreadsForStory(
       ...base,
       blockType: hasImage ? 'image' : 'text',
       imageUrl: story.imageStimulus?.imageUrl,
+      imageStoragePath: story.imageStimulus?.imageStoragePath,
       imageTitle: story.imageStimulus?.title ?? story.title,
       dateLabel: story.imageStimulus?.date ?? (story.imageStimulus?.year ? String(story.imageStimulus.year) : story.textStimulus?.date ?? (story.textStimulus?.year ? String(story.textStimulus.year) : undefined)),
       bodyText: body || story.textStimulus?.content || '',
@@ -174,6 +176,7 @@ function spreadsForStory(
       blockId: block.id,
       blockType: block.type,
       imageUrl: block.type === 'image' ? block.imageUrl : undefined,
+      imageStoragePath: block.type === 'image' ? block.imageStoragePath : undefined,
       imageTitle: block.type === 'image' ? block.title : undefined,
       dateLabel: dateLabel(block),
       bodyText:

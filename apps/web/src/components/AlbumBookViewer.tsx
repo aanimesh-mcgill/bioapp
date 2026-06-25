@@ -4,7 +4,7 @@ import { SpreadClipPlayer } from '@/components/SpreadClipPlayer';
 import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
 import { usePickText } from '@/context/UiLocaleContext';
 import { ShareButtons } from '@/components/ShareButtons';
-import { generateBookPdf } from '@/lib/generateBookPdf';
+import { downloadSavedBookPdf } from '@/lib/generateBookPdf';
 import type { AlbumSpread } from '@/lib/albumPages';
 import { displayChapterTitle } from '@/lib/albumPages';
 import type { AudioClip, Book } from '@/types';
@@ -230,13 +230,17 @@ export function AlbumBookViewer({
   };
 
   const handleDownloadPdf = async () => {
+    const savedUrl = book.savedPdfUrl;
+    if (!savedUrl) return;
     setPdfLoading(true);
     try {
-      await generateBookPdf(book, pages, clipsByStory);
+      await downloadSavedBookPdf(book, savedUrl);
     } finally {
       setPdfLoading(false);
     }
   };
+
+  const canDownloadPdf = Boolean(book.savedPdfUrl);
 
   const canGoPrev = pageIndex > 0;
   const canGoNext = pageIndex < pages.length - 1;
@@ -315,10 +319,18 @@ export function AlbumBookViewer({
               type="button"
               className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-sm ring-1 ring-amber-200 disabled:opacity-50"
               onClick={handleDownloadPdf}
-              disabled={pdfLoading}
+              disabled={pdfLoading || !canDownloadPdf}
+              title={
+                canDownloadPdf
+                  ? undefined
+                  : t({
+                      en: 'Save the PDF from book settings before downloading.',
+                      hi: 'डाउनलोड से पहले पुस्तक सेटिंग्स से PDF सहेजें।',
+                    })
+              }
             >
               {pdfLoading ? (
-                <BilingualBtn en="Building PDF…" hi="PDF बना रहे…" />
+                <BilingualBtn en="Downloading…" hi="डाउनलोड…" />
               ) : (
                 <BilingualBtn en="Download PDF" hi="PDF डाउनलोड" />
               )}

@@ -31,6 +31,8 @@ function mapBook(id: string, data: Record<string, unknown>): Book {
     publicSlug: data.publicSlug as string,
     isPublished: (data.isPublished as boolean) ?? false,
     chapterOrder: (data.chapterOrder as string[]) ?? [],
+    savedPdfUrl: data.savedPdfUrl as string | undefined,
+    savedPdfAt: (data.savedPdfAt as { toDate: () => Date })?.toDate?.(),
     createdAt: (data.createdAt as { toDate: () => Date })?.toDate?.() ?? new Date(),
     updatedAt: (data.updatedAt as { toDate: () => Date })?.toDate?.() ?? new Date(),
   };

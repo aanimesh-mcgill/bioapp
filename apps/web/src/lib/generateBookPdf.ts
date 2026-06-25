@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import { AlbumPdfPage, PDF_PAGE_H, PDF_PAGE_W } from '@/components/AlbumPdfPage';
 import type { AlbumSpread } from '@/lib/albumPages';
 import { filterBlankAlbumPages } from '@/lib/albumPages';
-import { resolveImageDataUrls } from '@/lib/imageDataUrl';
+import { resolveImagesForPdf } from '@/lib/imageDataUrl';
 import { qrCodeDataUrl } from '@/lib/qrCode';
 import { spreadPublicUrl } from '@/lib/slug';
 import type { AudioClip, Book } from '@/types';
@@ -45,13 +45,24 @@ function renderPageToDom(
 }
 
 function pageWithResolvedImage(page: AlbumSpread, resolved: Map<string, string>): AlbumSpread {
-  if (page.kind !== 'spread' || !page.imageUrl) return page;
-  const dataUrl = resolved.get(page.imageUrl);
-  return dataUrl ? { ...page, imageUrl: dataUrl } : page;
+  if (page.kind !== 'spread' || page.blockType !== 'image') return page;
+  const dataUrl =
+    (page.imageUrl ? resolved.get(page.imageUrl) : undefined) ??
+    (page.imageStoragePath ? resolved.get(page.imageStoragePath) : undefined);
+  if (!dataUrl) return page;
+  return { ...page, imageUrl: dataUrl };
 }
 
 async function capturePage(container: HTMLElement): Promise<string> {
   await document.fonts.ready;
+  try {
+    await Promise.all([
+      document.fonts.load('400 16px "Noto Sans Devanagari"'),
+      document.fonts.load('400 16px "Cormorant Garamond"'),
+    ]);
+  } catch {
+    // Font loading is best-effort before canvas capture.
+  }
   const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
     scale: 2,
     useCORS: true,
@@ -82,10 +93,13 @@ async function renderBookPdfDoc(
   mount.style.overflow = 'hidden';
   document.body.appendChild(mount);
 
-  const imageUrls = printablePages
-    .filter((p): p is AlbumSpread & { imageUrl: string } => p.kind === 'spread' && !!p.imageUrl)
-    .map((p) => p.imageUrl);
-  const resolvedImages = await resolveImageDataUrls(imageUrls);
+  const imageInputs = printablePages
+    .filter(
+      (p): p is AlbumSpread & { blockType: 'image' } =>
+        p.kind === 'spread' && p.blockType === 'image' && Boolean(p.imageUrl || p.imageStoragePath),
+    )
+    .map((p) => ({ url: p.imageUrl, storagePath: p.imageStoragePath }));
+  const resolvedImages = await resolveImagesForPdf(imageInputs);
 
   try {
     let pageStarted = false;
@@ -149,4 +163,22 @@ export function downloadBookPdfBlob(book: Book, blob: Blob): void {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function downloadSavedBookPdf(book: Book, pdfUrl: string): Promise<void> {
+  try {
+    const response = await fetch(pdfUrl);
+    if (!response.ok) throw new Error('Failed to fetch saved PDF');
+    downloadBookPdfBlob(book, await response.blob());
+  } catch {
+    const safeTitle = book.title.replace(/[^\w\s-]/g, '').trim() || 'album';
+    const anchor = document.createElement('a');
+    anchor.href = pdfUrl;
+    anchor.download = `${safeTitle}-aatma-katha.pdf`;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
 }

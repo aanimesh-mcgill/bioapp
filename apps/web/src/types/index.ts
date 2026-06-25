@@ -256,6 +256,9 @@ export interface Book {
   publicSlug: string;
   isPublished: boolean;
   chapterOrder: string[];
+  /** Firebase Storage download URL for the owner-saved album PDF. */
+  savedPdfUrl?: string;
+  savedPdfAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
