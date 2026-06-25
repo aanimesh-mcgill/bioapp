@@ -11,6 +11,7 @@
     "dev": "npm run dev --workspace=apps/web",
     "build": "npm run build --workspace=apps/web",
     "lint": "npm run lint --workspace=apps/web",
+    "console-audit": "node scripts/console-audit.mjs",
     "functions:build": "npm run build --workspace=functions",
     "functions:serve": "npm run serve --workspace=functions",
     "firebase:emulator": "firebase emulators:start",

@@ -1,7 +1,41 @@
 import { useState } from 'react';
-import { BilingualLine } from '@/components/BilingualText';
+import { BilingualBtn, BilingualLine, T } from '@/components/BilingualText';
 import { PhotoPicker } from '@/components/PhotoPicker';
+import { resolveImageContentType } from '@/lib/storageUpload';
+import { usePickText } from '@/context/UiLocaleContext';
 export { IMAGE_PROMPT_QUESTIONS } from '@/data/imagePromptQuestions';
+
+export function DateModeButtons({
+  dateMode,
+  setDateMode,
+}: {
+  dateMode: 'none' | 'date' | 'year';
+  setDateMode: (mode: 'none' | 'date' | 'year') => void;
+}) {
+  const t = usePickText();
+  const labels: Record<'none' | 'date' | 'year', string> = {
+    none: t({ en: 'Skip', hi: 'छोड़ें' }),
+    date: t({ en: 'Full date', hi: 'पूरी तारीख' }),
+    year: t({ en: 'Year only', hi: 'सिर्फ वर्ष' }),
+  };
+
+  return (
+    <div className="flex gap-2">
+      {(['none', 'date', 'year'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+            dateMode === mode ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
+          }`}
+          onClick={() => setDateMode(mode)}
+        >
+          {labels[mode]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 interface ImageMetadataFormProps {
   onContinue: (data: { file: File; date?: string; year?: number }) => void;
@@ -9,6 +43,7 @@ interface ImageMetadataFormProps {
 }
 
 export function ImageMetadataForm({ onContinue, submitting }: ImageMetadataFormProps) {
+  const t = usePickText();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [dateMode, setDateMode] = useState<'none' | 'date' | 'year'>('none');
@@ -23,8 +58,11 @@ export function ImageMetadataForm({ onContinue, submitting }: ImageMetadataFormP
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
+    const type = resolveImageContentType(file);
+    const normalized =
+      file.type === type ? file : new File([file], file.name, { type, lastModified: file.lastModified });
     onContinue({
-      file,
+      file: normalized,
       date: dateMode === 'date' ? date : undefined,
       year: dateMode === 'year' ? parseInt(year, 10) : undefined,
     });
@@ -35,12 +73,11 @@ export function ImageMetadataForm({ onContinue, submitting }: ImageMetadataFormP
       <PhotoPicker onSelect={handleFileSelect} disabled={submitting} />
       {!file && (
         <p className="text-xs text-slate-500">
-          Take a new photo or pick one from your gallery.
-          <span className="font-hindi block text-slate-400">नई फोटो लें या गैलरी से चुनें।</span>
+          <T en="Take a new photo or pick one from your gallery." hi="नई फोटो लें या गैलरी से चुनें।" />
         </p>
       )}
       {preview && (
-        <img src={preview} alt="Preview" className="max-h-[70vh] w-full rounded-xl object-contain" />
+        <img src={preview} alt="Preview" className="mx-auto max-h-48 w-full rounded-xl object-contain" />
       )}
 
       <div>
@@ -48,22 +85,9 @@ export function ImageMetadataForm({ onContinue, submitting }: ImageMetadataFormP
           en="When was this?"
           hi="यह कब की है?"
           enClass="mb-2 text-sm font-medium text-slate-700"
-          hiClass="mb-1 text-xs text-slate-400"
+          hiClass="mb-2 text-sm font-medium text-slate-700"
         />
-        <div className="flex gap-2">
-          {(['none', 'date', 'year'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                dateMode === mode ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setDateMode(mode)}
-            >
-              {mode === 'none' ? 'Skip / छोड़ें' : mode === 'date' ? 'Full date / पूरी तारीख' : 'Year only / सिर्फ वर्ष'}
-            </button>
-          ))}
-        </div>
+        <DateModeButtons dateMode={dateMode} setDateMode={setDateMode} />
         {dateMode === 'date' && (
           <input type="date" className="input-field mt-2" value={date} onChange={(e) => setDate(e.target.value)} />
         )}
@@ -81,7 +105,11 @@ export function ImageMetadataForm({ onContinue, submitting }: ImageMetadataFormP
       </div>
 
       <button type="submit" className="btn-primary w-full" disabled={submitting || !file}>
-        {submitting ? 'Uploading… / अपलोड…' : 'Continue / जारी रखें'}
+        {submitting ? (
+          <BilingualBtn en="Uploading…" hi="अपलोड…" />
+        ) : (
+          <BilingualBtn en="Continue" hi="जारी रखें" />
+        )}
       </button>
     </form>
   );
@@ -115,7 +143,7 @@ export function TextStimulusForm({ onSubmit, submitting }: TextStimulusFormProps
           en="Write a memory, quote, note, or prompt to respond to…"
           hi="कोई याद, उद्धरण, नोट या प्रश्न लिखें…"
           enClass="mb-1 text-xs font-medium text-slate-600"
-          hiClass="mb-1 text-xs text-slate-400"
+          hiClass="mb-1 text-xs font-medium text-slate-600"
         />
         <textarea
           className="input-field min-h-[120px]"
@@ -130,22 +158,9 @@ export function TextStimulusForm({ onSubmit, submitting }: TextStimulusFormProps
           en="When? (optional)"
           hi="कब? (वैकल्पिक)"
           enClass="mb-2 text-sm font-medium text-slate-700"
-          hiClass="mb-1 text-xs text-slate-400"
+          hiClass="mb-2 text-sm font-medium text-slate-700"
         />
-        <div className="flex gap-2">
-          {(['none', 'date', 'year'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                dateMode === mode ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-              onClick={() => setDateMode(mode)}
-            >
-              {mode === 'none' ? 'Skip / छोड़ें' : mode === 'date' ? 'Full date / पूरी तारीख' : 'Year only / सिर्फ वर्ष'}
-            </button>
-          ))}
-        </div>
+        <DateModeButtons dateMode={dateMode} setDateMode={setDateMode} />
         {dateMode === 'date' && (
           <input type="date" className="input-field mt-2" value={date} onChange={(e) => setDate(e.target.value)} />
         )}
@@ -163,7 +178,11 @@ export function TextStimulusForm({ onSubmit, submitting }: TextStimulusFormProps
       </div>
 
       <button type="submit" className="btn-primary w-full" disabled={submitting || !content.trim()}>
-        {submitting ? 'Saving… / सहेज रहे हैं…' : 'Save & Start Recording / सहेजें और रिकॉर्ड शुरू'}
+        {submitting ? (
+          <BilingualBtn en="Saving…" hi="सहेज रहे हैं…" />
+        ) : (
+          <BilingualBtn en="Save & Start Recording" hi="सहेजें और रिकॉर्ड शुरू" />
+        )}
       </button>
     </form>
   );

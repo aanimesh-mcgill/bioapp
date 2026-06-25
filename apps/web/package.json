@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "firebase": "^11.6.0",
+    "heic2any": "^0.0.4",
+    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",

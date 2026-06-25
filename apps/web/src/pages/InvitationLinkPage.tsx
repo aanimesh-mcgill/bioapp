@@ -34,7 +34,7 @@ export function InvitationLinkPage() {
       .then((accepted) => {
         clearPendingInviteToken();
         selectBook(accepted.bookId);
-        navigate('/contribute', { replace: true });
+        navigate('/stories', { replace: true });
       })
       .catch((acceptError) => {
         setError(acceptError instanceof Error ? acceptError.message : 'Could not open invitation.');

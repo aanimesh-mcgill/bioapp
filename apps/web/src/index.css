@@ -3,13 +3,30 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --heritage-cream: #f7f3eb;
+    --heritage-paper: #faf8f4;
+    --heritage-ink: #2c2419;
+    --heritage-muted: #8a7b6a;
+    --heritage-line: #e8dfd0;
+    --brand-600: #6b4e35;
+    --brand-50: #f7f3eb;
+    --shadow-soft: 0 2px 12px rgba(44, 36, 25, 0.06);
+    --shadow-card: 0 1px 4px rgba(44, 36, 25, 0.08);
+    --touch-min: 48px;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
 
   body {
-    @apply min-h-dvh;
+    min-height: 100dvh;
+    background-color: var(--heritage-cream);
+    color: var(--heritage-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     padding-bottom: env(safe-area-inset-bottom);
     padding-top: env(safe-area-inset-top);
   }
@@ -17,21 +34,158 @@
 
 @layer components {
   .btn-primary {
-    @apply min-h-touch min-w-touch rounded-xl bg-brand-600 px-6 py-3 text-base font-semibold text-white
-      transition active:scale-95 disabled:opacity-50;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+    border-radius: 9999px;
+    background-color: var(--brand-600);
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    box-shadow: var(--shadow-soft);
+    transition: transform 150ms ease;
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
   }
 
   .btn-secondary {
-    @apply min-h-touch min-w-touch rounded-xl border-2 border-brand-600 bg-white px-6 py-3
-      text-base font-semibold text-brand-600 transition active:scale-95 disabled:opacity-50;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+    border-radius: 9999px;
+    border: 1px solid rgb(44 36 25 / 0.2);
+    background-color: var(--heritage-paper);
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--heritage-ink);
+    transition: transform 150ms ease;
+  }
+
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn-secondary:disabled {
+    opacity: 0.5;
+  }
+
+  .btn-ghost {
+    border-radius: 9999px;
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--brand-600);
+    transition: background-color 150ms ease;
+  }
+
+  .btn-ghost:hover {
+    background-color: var(--brand-50);
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base
-      focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200;
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--heritage-line);
+    background-color: var(--heritage-paper);
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    color: var(--heritage-ink);
+  }
+
+  .input-field::placeholder {
+    color: var(--heritage-muted);
+  }
+
+  .input-field:focus {
+    border-color: #8b6b45;
+    outline: none;
+    box-shadow: 0 0 0 1px #c4a67a;
   }
 
   .card {
-    @apply rounded-2xl bg-white p-4 shadow-sm border border-slate-100;
+    border-radius: 1rem;
+    border: 1px solid var(--heritage-line);
+    background-color: var(--heritage-paper);
+    padding: 1rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  .heritage-page {
+    padding: 1rem 1.25rem 7rem;
+  }
+
+  .heritage-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--heritage-muted);
+  }
+
+  .heritage-title {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 1.875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    color: var(--heritage-ink);
+  }
+
+  .heritage-subtitle {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 1.125rem;
+    color: rgb(44 36 25 / 0.8);
+  }
+
+  .nav-dot {
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 0.125rem;
+    height: 0.25rem;
+    width: 0.25rem;
+    border-radius: 9999px;
+    background-color: var(--brand-600);
+  }
+
+  .app-top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-bottom: 1px solid var(--heritage-line);
+    background-color: #f7f3eb;
+    background-color: var(--heritage-cream);
+    box-shadow: 0 1px 3px rgba(44, 36, 25, 0.08);
+    isolation: isolate;
+  }
+
+  .app-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    border-top: 1px solid var(--heritage-line);
+    background-color: #faf8f4;
+    background-color: var(--heritage-paper);
+    box-shadow: 0 -2px 12px rgba(44, 36, 25, 0.12);
+    isolation: isolate;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

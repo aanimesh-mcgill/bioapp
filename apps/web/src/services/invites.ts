@@ -6,6 +6,7 @@ import {
   onSnapshot,
   query,
   where,
+  getDoc,
   getDocs,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -24,6 +25,7 @@ function mapInvite(id: string, data: Record<string, unknown>): ContributorInvite
     relationship: data.relationship as string,
     inviteSlug: data.inviteSlug as string,
     isActive: (data.isActive as boolean) ?? true,
+    contributorUserId: data.contributorUserId as string | undefined,
     createdAt: (data.createdAt as { toDate: () => Date })?.toDate?.() ?? new Date(),
   };
 }
@@ -96,4 +98,39 @@ export async function deactivateInvite(inviteId: string) {
 
 export function getInviteLink(invite: ContributorInvite): string {
   return contributeInviteUrl(invite.inviteSlug);
+}
+
+export async function linkContributorUser(inviteId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, 'contributorInvites', inviteId), {
+    contributorUserId: userId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** All contributor invites linked to this user (including inactive), for story history and slug lookup. */
+export function subscribeToContributorInvitesForUser(
+  userId: string,
+  cb: (invites: ContributorInvite[]) => void,
+): () => void {
+  const q = query(
+    collection(db, 'contributorInvites'),
+    where('contributorUserId', '==', userId),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      cb(
+        snap.docs
+          .map((d) => mapInvite(d.id, d.data()))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      );
+    },
+    () => cb([]),
+  );
+}
+
+export async function getContributorInviteById(inviteId: string): Promise<ContributorInvite | null> {
+  const snap = await getDoc(doc(db, 'contributorInvites', inviteId));
+  if (!snap.exists()) return null;
+  return mapInvite(snap.id, snap.data());
 }

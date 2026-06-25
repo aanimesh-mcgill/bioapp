@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BilingualLine } from '@/components/BilingualText';
+import { BilingualLine, T } from '@/components/BilingualText';
 import type { AudioClip } from '@/types';
 
 function formatDuration(seconds: number) {
@@ -10,18 +10,31 @@ function formatDuration(seconds: number) {
 
 interface SpreadClipPlayerProps {
   clips: AudioClip[];
+  autoPlay?: boolean;
+  /** Fired after the last clip in the queue finishes (or immediately if there are no clips). */
+  onQueueComplete?: () => void;
 }
 
-export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
+export function SpreadClipPlayer({ clips, autoPlay = false, onQueueComplete }: SpreadClipPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const prefetchRef = useRef<HTMLAudioElement>(null);
+  const advancingRef = useRef(false);
+  const onQueueCompleteRef = useRef(onQueueComplete);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
 
-  const readyClips = clips.filter((c) => c.audioUrl);
-  const repeatingClips = useMemo(() => {
-    if (readyClips.length <= 1) return readyClips;
-    return [...readyClips, ...readyClips, ...readyClips];
-  }, [readyClips]);
+  onQueueCompleteRef.current = onQueueComplete;
+
+  const readyClips = useMemo(() => {
+    const seen = new Set<string>();
+    return clips.filter((clip) => {
+      if (!clip.audioUrl || seen.has(clip.id)) return false;
+      seen.add(clip.id);
+      return true;
+    });
+  }, [clips]);
+
+  const clipIds = useMemo(() => readyClips.map((c) => c.id).join(','), [readyClips]);
 
   const playFrom = useCallback(
     (idx: number) => {
@@ -29,6 +42,7 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
       if (playing && activeIdx === idx) {
         audioRef.current?.pause();
         setPlaying(false);
+        setActiveIdx(null);
         return;
       }
       setActiveIdx(idx);
@@ -38,25 +52,86 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
   );
 
   useEffect(() => {
+    if (activeIdx === null) return;
+    const nextClip = readyClips[activeIdx + 1];
+    const prefetch = prefetchRef.current;
+    if (!nextClip?.audioUrl || !prefetch) return;
+    prefetch.src = nextClip.audioUrl;
+    prefetch.preload = 'auto';
+    prefetch.load();
+  }, [activeIdx, readyClips]);
+
+  const readyClipsRef = useRef(readyClips);
+  readyClipsRef.current = readyClips;
+
+  useEffect(() => {
     if (!playing || activeIdx === null) return;
-    const clip = readyClips[activeIdx];
+    const clip = readyClipsRef.current[activeIdx];
     const audio = audioRef.current;
     if (!audio || !clip?.audioUrl) return;
+
+    // Parent re-renders pass a new clips array — don't restart if this clip is already playing.
+    if (audio.dataset.clipId === clip.id && !audio.ended) {
+      if (audio.paused) {
+        advancingRef.current = true;
+        void audio.play().catch(() => {
+          setPlaying(false);
+          setActiveIdx(null);
+        });
+      }
+      return;
+    }
+
+    advancingRef.current = true;
+    audio.dataset.clipId = clip.id;
     audio.src = clip.audioUrl;
-    audio.play().catch(() => {
+    void audio.play().catch(() => {
       setPlaying(false);
       setActiveIdx(null);
     });
-  }, [activeIdx, playing, readyClips]);
+  }, [activeIdx, playing, clipIds]);
+
+  useEffect(() => {
+    if (!autoPlay) return;
+    if (readyClips.length === 0) {
+      onQueueCompleteRef.current?.();
+      return;
+    }
+    setActiveIdx(0);
+    setPlaying(true);
+  }, [autoPlay, clipIds, readyClips.length]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      audio?.pause();
+    };
+  }, []);
+
+  const handlePlaying = () => {
+    advancingRef.current = false;
+    setPlaying(true);
+  };
+
+  const handlePause = () => {
+    if (advancingRef.current) return;
+    const audio = audioRef.current;
+    if (audio && !audio.ended) {
+      setPlaying(false);
+    }
+  };
 
   const handleEnded = () => {
     if (activeIdx === null) return;
     const next = activeIdx + 1;
     if (next < readyClips.length) {
+      advancingRef.current = true;
       setActiveIdx(next);
     } else {
+      advancingRef.current = false;
       setPlaying(false);
       setActiveIdx(null);
+      onQueueCompleteRef.current?.();
     }
   };
 
@@ -64,7 +139,15 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
 
   return (
     <div>
-      <audio ref={audioRef} preload="metadata" onEnded={handleEnded} onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
+      <audio
+        ref={audioRef}
+        preload="auto"
+        onPlaying={handlePlaying}
+        onPause={handlePause}
+        onEnded={handleEnded}
+      />
+      <audio ref={prefetchRef} preload="auto" className="hidden" aria-hidden />
+
       <BilingualLine
         en="Listen to this memory"
         hi="इस याद को सुनें"
@@ -73,14 +156,13 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
       />
       <div className="overflow-x-auto pt-1">
         <div className="flex min-w-max gap-3">
-          {repeatingClips.map((clip, idx) => {
-            const normalizedIdx = readyClips.length === 0 ? idx : idx % readyClips.length;
-            const isActive = playing && activeIdx === normalizedIdx;
+          {readyClips.map((clip, idx) => {
+            const isActive = playing && activeIdx === idx;
             return (
               <button
-                key={`${clip.id}-${idx}`}
+                key={clip.id}
                 type="button"
-                onClick={() => playFrom(normalizedIdx)}
+                onClick={() => playFrom(idx)}
                 className={`flex min-w-[140px] items-center gap-2 rounded-xl px-3 py-2 ring-1 transition ${
                   isActive
                     ? 'bg-brand-100 ring-brand-300'
@@ -95,7 +177,7 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
                   {isActive ? '⏸' : '▶'}
                 </span>
                 <span className="text-xs font-medium text-amber-900">
-                  Clip {normalizedIdx + 1}
+                  Clip {idx + 1}
                   {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
                 </span>
               </button>
@@ -105,7 +187,7 @@ export function SpreadClipPlayer({ clips }: SpreadClipPlayerProps) {
       </div>
       {readyClips.length > 1 && (
         <p className="mt-2 text-center text-[10px] text-amber-700/60">
-          Clips play in order automatically / क्लिप क्रम से स्वचालित चलेंगी
+          <T en="Clips play in order automatically" hi="क्लिप क्रम से स्वचालित चलेंगी" />
         </p>
       )}
     </div>

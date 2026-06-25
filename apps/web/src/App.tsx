@@ -23,9 +23,13 @@ import {
 } from '@/pages/ContributeActionPages';
 import { ContributeStoryPage } from '@/pages/ContributeStoryPage';
 import { BooksPage } from '@/pages/BooksPage';
-import { BookContributionsPage } from '@/pages/BookContributionsPage';
+import { ContributorHomePage } from '@/pages/ContributorHomePage';
 import { InvitationsPage } from '@/pages/InvitationsPage';
 import { InvitationLinkPage } from '@/pages/InvitationLinkPage';
+import { PhotosPage } from '@/pages/PhotosPage';
+import { AboutPage } from '@/pages/AboutPage';
+import { TermsPage } from '@/pages/TermsPage';
+import { PrivacyPage } from '@/pages/PrivacyPage';
 
 function ContributeRoutes() {
   return (
@@ -46,6 +50,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/invite/:token" element={<InvitationLinkPage />} />
       <Route path="/browse/:token" element={<PublicBrowsePage />} />
       <Route path="/read/:bookSlug/listen/:clipId" element={<ClipListenPage />} />
@@ -55,10 +62,11 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/books" element={<BooksPage />} />
-        <Route path="/contribute" element={<BookContributionsPage />} />
+        <Route path="/contribute" element={<ContributorHomePage />} />
         <Route path="/invitations" element={<InvitationsPage />} />
         <Route path="/record" element={<RecordPage />} />
         <Route path="/prompts" element={<StimuliPage />} />
+        <Route path="/photos" element={<PhotosPage />} />
         <Route path="/add-stimulus" element={<AddStimulusPage />} />
         <Route path="/book" element={<BookManagePage />} />
         <Route path="/book/album" element={<BookAlbumPreviewPage />} />

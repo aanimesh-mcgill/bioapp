@@ -1,6 +1,9 @@
+import autoprefixer from 'autoprefixer';
+import tailwindcss from 'tailwindcss';
+import { fileURLToPath } from 'node:url';
+
+const configPath = fileURLToPath(new URL('./tailwind.config.js', import.meta.url));
+
 export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
+  plugins: [tailwindcss({ config: configPath }), autoprefixer()],
 };

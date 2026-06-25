@@ -1,310 +1,171 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { getPublicBookByToken } from '@/services/booksCollaboration';
-import type { PublicBookSnapshot } from '@/types';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { AlbumBookViewer } from '@/components/AlbumBookViewer';
+import { BilingualBtn } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
+import { buildAlbumPages, indexClipsByStory, resolveSpreadPageIndex } from '@/lib/albumPages';
+import { bookPublicUrl } from '@/lib/slug';
+import { getBrowsableBookData } from '@/services/books';
+import type { AudioClip, Book, Chapter, StorySession } from '@/types';
 
-type PlaybackSegment =
-  | { id: string; kind: 'tts'; label: string; text: string }
-  | { id: string; kind: 'audio'; label: string; audioUrl: string };
+function scopeAlbumContent(
+  chapters: Chapter[],
+  stories: StorySession[],
+  clips: AudioClip[],
+  options: { chapterId?: string | null; storyId?: string | null },
+): { chapters: Chapter[]; stories: StorySession[]; clips: AudioClip[] } {
+  const { chapterId, storyId } = options;
 
-function normalize(text: string) {
-  return text.trim().toLowerCase();
-}
-
-function getImageName(url?: string) {
-  if (!url) return '';
-  try {
-    const full = new URL(url);
-    const fileName = full.pathname.split('/').filter(Boolean).pop() ?? '';
-    return decodeURIComponent(fileName)
-      .replace(/\.[a-zA-Z0-9]+$/, '')
-      .replace(/[-_]+/g, ' ');
-  } catch {
-    return '';
-  }
-}
-
-function buildAudiobookSegments(book: PublicBookSnapshot): PlaybackSegment[] {
-  const segments: PlaybackSegment[] = [];
-  const clips = [...book.audioClips].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
-  const remainingClipIds = new Set(clips.map((clip) => clip.id));
-
-  const findMatchingClip = (storyTitle: string) => {
-    const storyKey = normalize(storyTitle);
-    return clips.find((clip) => {
-      if (!remainingClipIds.has(clip.id)) return false;
-      const clipKey = normalize(clip.promptText);
-      return (
-        clipKey === storyKey ||
-        clipKey.includes(storyKey) ||
-        storyKey.includes(clipKey)
-      );
-    });
-  };
-
-  segments.push({
-    id: 'intro',
-    kind: 'tts',
-    label: `Intro: ${book.bookTitle}`,
-    text: `Now reading ${book.bookTitle}.`,
-  });
-
-  book.stories.forEach((story, index) => {
-    segments.push({
-      id: `story-title-${story.id}`,
-      kind: 'tts',
-      label: `Chapter ${index + 1}: ${story.title}`,
-      text: `Chapter ${index + 1}. ${story.title}.`,
-    });
-
-    const imageName = getImageName(story.imageUrl);
-    if (imageName) {
-      segments.push({
-        id: `story-image-${story.id}`,
-        kind: 'tts',
-        label: `Image: ${imageName}`,
-        text: `Image name: ${imageName}.`,
-      });
-    }
-
-    const matchedClip = findMatchingClip(story.title);
-    if (matchedClip?.audioUrl) {
-      remainingClipIds.delete(matchedClip.id);
-      segments.push({
-        id: `story-audio-${matchedClip.id}`,
-        kind: 'audio',
-        label: `Audio for ${story.title}`,
-        audioUrl: matchedClip.audioUrl,
-      });
-    } else {
-      segments.push({
-        id: `story-content-${story.id}`,
-        kind: 'tts',
-        label: `Story text: ${story.title}`,
-        text: `Story by ${story.authorName}. ${story.content}`,
-      });
-    }
-  });
-
-  const extraClips = clips.filter((clip) => remainingClipIds.has(clip.id));
-  if (extraClips.length > 0) {
-    segments.push({
-      id: 'extra-prompts',
-      kind: 'tts',
-      label: 'Additional prompts',
-      text: 'Now playing additional prompts and image notes.',
-    });
+  if (storyId) {
+    const story = stories.find((s) => s.id === storyId);
+    if (!story) return { chapters: [], stories: [], clips: [] };
+    return {
+      chapters: [],
+      stories: [story],
+      clips: clips.filter((c) => c.storySessionId === story.id),
+    };
   }
 
-  extraClips.forEach((clip) => {
-    const imageName = getImageName(clip.imageUrl);
-    const labelText = clip.promptText || imageName || 'Untitled prompt';
+  if (chapterId) {
+    const chapter = chapters.find((c) => c.id === chapterId);
+    if (!chapter) return { chapters: [], stories: [], clips: [] };
+    const chapterStories = chapter.storyOrder
+      .map((id) => stories.find((s) => s.id === id))
+      .filter(Boolean) as StorySession[];
+    const storyIds = new Set(chapterStories.map((s) => s.id));
+    return {
+      chapters: [chapter],
+      stories: chapterStories,
+      clips: clips.filter((c) => storyIds.has(c.storySessionId)),
+    };
+  }
 
-    segments.push({
-      id: `prompt-label-${clip.id}`,
-      kind: 'tts',
-      label: `Prompt: ${labelText}`,
-      text: imageName
-        ? `${clip.promptType} prompt: ${clip.promptText}. Image name: ${imageName}.`
-        : `${clip.promptType} prompt: ${clip.promptText}.`,
-    });
-
-    if (clip.audioUrl) {
-      segments.push({
-        id: `prompt-audio-${clip.id}`,
-        kind: 'audio',
-        label: `Audio prompt: ${labelText}`,
-        audioUrl: clip.audioUrl,
-      });
-    }
-  });
-
-  return segments;
+  return { chapters, stories, clips };
 }
 
 export function PublicBrowsePage() {
+  const t = usePickText();
   const { token } = useParams<{ token: string }>();
-  const [book, setBook] = useState<PublicBookSnapshot | null>(null);
+  const [searchParams] = useSearchParams();
+  const chapterId = searchParams.get('chapter');
+  const spreadStoryId = searchParams.get('story');
+  const spreadBlockId = searchParams.get('block');
+  const spreadPage = searchParams.get('page');
+  const [book, setBook] = useState<Book | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [stories, setStories] = useState<StorySession[]>([]);
+  const [clips, setClips] = useState<AudioClip[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [nowPlaying, setNowPlaying] = useState('');
-  const mountedRef = useRef(true);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const stopRequestedRef = useRef(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!token) return;
-    setLoading(true);
-    void getPublicBookByToken(token)
-      .then(setBook)
-      .finally(() => setLoading(false));
-  }, [token]);
 
-  const playbackSegments = useMemo(
-    () => (book ? buildAudiobookSegments(book) : []),
-    [book],
+    async function load() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await getBrowsableBookData(token);
+        if (!data) {
+          setError(
+            t({
+              en: 'This browse link is invalid or has not been set up yet.',
+              hi: 'यह ब्राउज़ लिंक अमान्य है या अभी सेट नहीं हुआ।',
+            }),
+          );
+          return;
+        }
+        setBook(data.book);
+        setChapters(data.chapters);
+        setStories(data.stories);
+        setClips(data.clips);
+      } catch (err) {
+        console.error('Failed to load browse book:', err);
+        setError(t({ en: 'Failed to load book.', hi: 'पुस्तक लोड करने में विफल।' }));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
+  }, [token, t]);
+
+  const scoped = useMemo(
+    () =>
+      scopeAlbumContent(chapters, stories, clips, {
+        chapterId,
+        storyId: spreadStoryId,
+      }),
+    [chapters, stories, clips, chapterId, spreadStoryId],
   );
 
-  const playSpeech = useCallback((text: string) => {
-    if (!('speechSynthesis' in window)) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.98;
-      utterance.pitch = 1;
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
-      window.speechSynthesis.speak(utterance);
-    });
-  }, []);
+  const clipsByStory = useMemo(() => indexClipsByStory(scoped.clips), [scoped.clips]);
+  const pages = useMemo(
+    () =>
+      book
+        ? buildAlbumPages(book, scoped.chapters, scoped.stories, clipsByStory, { preview: false })
+        : [],
+    [book, scoped.chapters, scoped.stories, clipsByStory],
+  );
 
-  const playAudio = useCallback((url: string) => {
-    return new Promise<void>((resolve) => {
-      const audio = new Audio(url);
-      currentAudioRef.current = audio;
+  const shareUrl = useMemo(() => {
+    if (!book) return null;
+    if (book.isPublished) return bookPublicUrl(book.publicSlug);
+    return typeof window !== 'undefined' ? `${window.location.origin}/browse/${token}` : null;
+  }, [book, token]);
 
-      const done = () => {
-        audio.onended = null;
-        audio.onerror = null;
-        audio.onpause = null;
-        if (currentAudioRef.current === audio) {
-          currentAudioRef.current = null;
-        }
-        resolve();
-      };
-
-      audio.onended = done;
-      audio.onerror = done;
-      audio.onpause = () => {
-        if (stopRequestedRef.current) done();
-      };
-      void audio.play().catch(done);
-    });
-  }, []);
-
-  const stopPlayback = useCallback(() => {
-    stopRequestedRef.current = true;
-    currentAudioRef.current?.pause();
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    if (mountedRef.current) {
-      setIsPlaying(false);
-      setNowPlaying('');
-    }
-  }, []);
-
-  const handleAudiobookToggle = useCallback(() => {
-    if (isPlaying) {
-      stopPlayback();
-      return;
-    }
-    if (!book || playbackSegments.length === 0) return;
-
-    stopRequestedRef.current = false;
-    setIsPlaying(true);
-
-    void (async () => {
-      try {
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-        }
-
-        for (const segment of playbackSegments) {
-          if (stopRequestedRef.current) break;
-          setNowPlaying(segment.label);
-          if (segment.kind === 'audio') {
-            await playAudio(segment.audioUrl);
-          } else {
-            await playSpeech(segment.text);
-          }
-        }
-      } finally {
-        if (mountedRef.current) {
-          setIsPlaying(false);
-          setNowPlaying('');
-        }
-        stopRequestedRef.current = false;
-      }
-    })();
-  }, [isPlaying, stopPlayback, book, playbackSegments, playAudio, playSpeech]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      stopRequestedRef.current = true;
-      currentAudioRef.current?.pause();
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
+  const shareTitle = useMemo(() => book?.title ?? '', [book]);
 
   if (loading) {
     return (
-      <div className="flex min-h-dvh items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center bg-[#f4ebe0]">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600" />
       </div>
     );
   }
 
-  if (!book) {
+  if (error || !book) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-10">
-        <h1 className="text-2xl font-bold text-brand-600">Book not available</h1>
-        <p className="mt-2 text-slate-600">
-          This public link has expired or has not been generated yet.
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-[#f4ebe0] px-6 text-center">
+        <p className="text-lg text-slate-700">
+          {error || t({ en: 'Book unavailable', hi: 'पुस्तक उपलब्ध नहीं' })}
         </p>
-        <Link to="/login" className="btn-primary mt-6 inline-block">
-          Sign in
+        <Link to="/" className="btn-primary mt-6">
+          <BilingualBtn en="Go to AATMA KATHA" hi="AATMA KATHA पर जाएं" />
         </Link>
       </div>
     );
   }
 
-  return (
-    <div className="mx-auto max-w-2xl px-6 py-8">
-      <header className="mb-6">
-        <p className="text-sm uppercase tracking-wide text-slate-500">
-          Public photobook
-        </p>
-        <h1 className="text-3xl font-bold text-brand-600">{book.bookTitle}</h1>
-        {book.description && <p className="mt-2 text-slate-600">{book.description}</p>}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button className="btn-primary" onClick={handleAudiobookToggle}>
-            {isPlaying ? 'Stop audiobook' : 'Read as audiobook'}
-          </button>
-          <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600">
-            {book.audioClips.length} clip{book.audioClips.length === 1 ? '' : 's'} available
-          </span>
-        </div>
-        {nowPlaying && (
-          <p className="mt-2 text-sm text-brand-700">
-            Now playing: <span className="font-semibold">{nowPlaying}</span>
-          </p>
-        )}
-      </header>
+  const hasExplicitPage = spreadPage !== null;
+  let initialPageIndex = resolveSpreadPageIndex(pages, {
+    storyId: spreadStoryId,
+    blockId: spreadBlockId,
+    page: spreadPage,
+  });
+  if (
+    !hasExplicitPage &&
+    !spreadStoryId &&
+    !spreadBlockId &&
+    chapterId &&
+    scoped.chapters.length > 0
+  ) {
+    const chapter = scoped.chapters.find((c) => c.id === chapterId);
+    if (chapter) {
+      const idx = pages.findIndex((p) => p.kind === 'chapter' && p.chapterTitle === chapter.title);
+      if (idx >= 0) initialPageIndex = idx;
+    }
+  }
 
-      <div className="space-y-4">
-        {book.stories.map((story) => (
-          <article key={story.id} className="card">
-            <h2 className="text-lg font-semibold text-slate-900">{story.title}</h2>
-            <p className="mt-1 text-xs text-slate-500">By {story.authorName}</p>
-            {story.imageUrl && (
-              <img
-                src={story.imageUrl}
-                alt={story.title}
-                className="mt-3 h-52 w-full rounded-xl object-cover"
-              />
-            )}
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-              {story.content}
-            </p>
-          </article>
-        ))}
-      </div>
-    </div>
+  return (
+    <AlbumBookViewer
+      book={book}
+      pages={pages}
+      clipsByStory={clipsByStory}
+      mode="public"
+      initialPageIndex={initialPageIndex}
+      shareUrl={shareUrl}
+      shareTitle={shareTitle}
+    />
   );
 }

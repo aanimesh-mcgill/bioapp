@@ -67,6 +67,7 @@ jobs:
         run: firebase deploy --only hosting,functions,firestore:rules,storage --non-interactive
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          TRANSCRIPTION_WORKER_URL: https://autobio-transcription-1012550333400.us-central1.run.app
 
   deploy-transcription-worker:
     needs: lint-and-build
@@ -95,4 +96,6 @@ jobs:
             --memory 2Gi \
             --cpu 2 \
             --timeout 600 \
-            --set-env-vars WHISPER_MODEL=small,WHISPER_DEVICE=cpu
+            --min-instances 1 \
+            --update-env-vars WHISPER_MODEL=small \
+            --update-env-vars WHISPER_DEVICE=cpu

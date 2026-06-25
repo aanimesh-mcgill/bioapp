@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { MicPermissionHelp } from '@/components/MicPermissionHelp';
 import { ClipPlayButton } from '@/components/ClipPlayButton';
-import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
-import { clipStatusLabel } from '@/lib/bilingualUi';
-import type { AudioClip } from '@/types';
+import { ClipList } from '@/components/ClipRecorder';
+import { BilingualBtn } from '@/components/BilingualText';
+import { clipsForPrompt } from '@/lib/storyBlocks';
+import type { AudioClip, ImagePromptAnswers, StoryImageBlock } from '@/types';
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -19,7 +20,12 @@ interface CompactClipRecorderProps {
   hasExistingClip?: boolean;
 }
 
-export function CompactClipRecorder({ onClipReady, disabled, autoSave, hasExistingClip }: CompactClipRecorderProps) {
+export function CompactClipRecorder({
+  onClipReady,
+  disabled,
+  autoSave,
+  hasExistingClip,
+}: CompactClipRecorderProps) {
   const { isRecording, duration, blob, errorKind, start, stop, reset } = useAudioRecorder();
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,11 +52,9 @@ export function CompactClipRecorder({ onClipReady, disabled, autoSave, hasExisti
       .then(() => {
         reset();
         setExpanded(false);
-      })
-      .finally(() => {
-        setSaving(false);
         autoSavedBlobRef.current = null;
-      });
+      })
+      .finally(() => setSaving(false));
   }, [autoSave, expanded, isRecording, blob, duration, onClipReady, reset, saving]);
 
   if (!expanded && !isRecording) {
@@ -61,7 +65,11 @@ export function CompactClipRecorder({ onClipReady, disabled, autoSave, hasExisti
         onClick={() => setExpanded(true)}
         disabled={disabled}
       >
-        🎙️ <BilingualBtn en={hasExistingClip ? 'Add clip' : 'Record'} hi={hasExistingClip ? 'क्लिप जोड़ें' : 'रिकॉर्ड'} />
+        🎙️{' '}
+        <BilingualBtn
+          en={hasExistingClip ? 'Add clip' : 'Record'}
+          hi={hasExistingClip ? 'क्लिप जोड़ें' : 'रिकॉर्ड'}
+        />
       </button>
     );
   }
@@ -113,60 +121,40 @@ export function CompactClipRecorder({ onClipReady, disabled, autoSave, hasExisti
 
 interface PromptClipListProps {
   clips: AudioClip[];
+  block: StoryImageBlock;
+  promptKey: keyof ImagePromptAnswers;
+  onMoveUp: (clipId: string) => void;
+  onMoveDown: (clipId: string) => void;
   onDelete: (clipId: string) => void;
+  onLabelChange?: (clipId: string, label: string) => void;
 }
 
-export function PromptClipList({ clips, onDelete }: PromptClipListProps) {
-  if (clips.length === 0) return null;
-  const repeatingClips = clips.length <= 1 ? clips : [...clips, ...clips, ...clips];
-  const baseCount = clips.length;
+export function PromptClipList({
+  clips,
+  block,
+  promptKey,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+  onLabelChange,
+}: PromptClipListProps) {
+  const promptClips = useMemo(
+    () => clipsForPrompt(clips, block, promptKey),
+    [clips, block, promptKey],
+  );
+  const clipOrder = useMemo(() => promptClips.map((c) => c.id), [promptClips]);
+
+  if (promptClips.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      <BilingualLine
-        en={`Recordings (${clips.length})`}
-        hi={`रिकॉर्डिंग (${clips.length})`}
-        enClass="text-sm font-semibold uppercase tracking-wide text-slate-500"
-        hiClass="text-xs text-slate-400"
-      />
-      <div className="overflow-x-auto pt-1">
-        <div className="flex min-w-max gap-3">
-          {repeatingClips.map((clip, idx) => {
-            const normalizedIdx = idx % baseCount;
-            const showDelete = baseCount <= 1 || (idx >= baseCount && idx < baseCount * 2);
-            return (
-              <div key={`${clip.id}-${idx}`} className="card flex w-80 shrink-0 items-start gap-3 py-3">
-                <ClipPlayButton audioUrl={clip.audioUrl} size="md" />
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
-                  {normalizedIdx + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  {clip.label && (
-                    <p className="text-sm font-medium text-slate-800">{clip.label}</p>
-                  )}
-                  <p className="text-xs text-slate-500">
-                    {clip.durationSeconds ? `${formatDuration(clip.durationSeconds)} · ` : ''}
-                    {clipStatusLabel(clip.status)}
-                  </p>
-                  {clip.transcript?.text && (
-                    <p className="mt-1 line-clamp-3 text-sm text-slate-700">{clip.transcript.text}</p>
-                  )}
-                </div>
-                {showDelete && (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-                    onClick={() => onDelete(clip.id)}
-                    aria-label="Delete clip"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <ClipList
+      clips={clips}
+      clipOrder={clipOrder}
+      numberingScopeClips={promptClips}
+      onMoveUp={onMoveUp}
+      onMoveDown={onMoveDown}
+      onDelete={onDelete}
+      onLabelChange={onLabelChange}
+    />
   );
 }

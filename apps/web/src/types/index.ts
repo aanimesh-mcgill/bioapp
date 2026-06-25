@@ -48,6 +48,52 @@ export interface Stimulus {
   categoryHi: string;
 }
 
+export type PromptSource = 'user' | 'system';
+
+/** Book-scoped story prompt (stored under collabBooks/{bookId}/prompts). */
+export interface BookPrompt {
+  id: string;
+  bookId: string;
+  order: number;
+  titleEn: string;
+  titleHi: string;
+  promptEn: string;
+  promptHi: string;
+  category: string;
+  categoryHi: string;
+  source: PromptSource;
+  /** e.g. autobiography:earliest-memory when copied from a system template */
+  systemTemplateId?: string;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BookPromptProgress {
+  completedPromptIds: string[];
+  skippedPromptIds?: string[];
+  skippedPhotoIds?: string[];
+  skippedTurnIds?: string[];
+  updatedAt: Date;
+}
+
+export type BookPhotoStatus = 'pending' | 'in_progress' | 'done' | 'skipped';
+
+/** Queued photo for a collab book — prompts one story at a time. */
+export interface BookPhoto {
+  id: string;
+  bookId: string;
+  imageUrl: string;
+  imageStoragePath: string;
+  date?: string;
+  year?: number;
+  status: BookPhotoStatus;
+  storySessionId?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ImagePromptEntry {
   draftText?: string;
   finalText?: string;
@@ -83,6 +129,8 @@ export interface StoryImageBlock {
   date?: string;
   year?: number;
   prompts: ImagePromptAnswers;
+  /** Unified playback order for all clips on this photo */
+  clipOrder?: string[];
 }
 
 export type StoryContentBlock = StoryTextBlock | StoryImageBlock;
@@ -129,8 +177,10 @@ export interface AudioClip {
   blockId?: string;
   /** When set, clip belongs to an image prompt answer (not main story) */
   promptKey?: string;
-  /** Display name — e.g. photo title for image-stimulus clips */
+  /** Display name — user-editable; defaults to "Clip N" in UI when empty */
   label?: string;
+  /** Fixed sequence number when clip was first added (does not change on reorder) */
+  clipNumber?: number;
   storagePath: string;
   audioUrl?: string;
   durationSeconds?: number;
@@ -144,6 +194,8 @@ export interface StorySession {
   id: string;
   userId: string;
   bookId?: string;
+  /** Collab book this story belongs to (for prompts, photos, etc.). */
+  collabBookId?: string;
   bookOwnerId?: string;
   chapterId?: string;
   chapterOrder?: number;
@@ -174,6 +226,8 @@ export interface StorySession {
   contributorInviteId?: string;
   contributorName?: string;
   contributorRelationship?: string;
+  /** Set when contributor taps Submit — locks further edits by contributor. */
+  contributorSubmitted?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -188,12 +242,15 @@ export interface ContributorInvite {
   relationship: string;
   inviteSlug: string;
   isActive: boolean;
+  contributorUserId?: string;
   createdAt: Date;
 }
 
 export interface Book {
   id: string;
   userId: string;
+  /** Links this published album to a collabBooks entry when set. */
+  collabBookId?: string;
   title: string;
   authorName: string;
   publicSlug: string;
@@ -237,6 +294,9 @@ export interface AuthorBook {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/** Collab / multi-book model (`collabBooks` collection). */
+export type CollabBook = AuthorBook;
 
 export interface BookInvitation {
   id: string;
@@ -282,6 +342,8 @@ export interface BookAudioClip {
 export interface PublicBookSnapshot {
   id: string;
   bookId: string;
+  /** Album book used for live browse view */
+  albumBookId?: string;
   bookTitle: string;
   description?: string;
   shareToken: string;
@@ -290,7 +352,9 @@ export interface PublicBookSnapshot {
     title: string;
     content: string;
     imageUrl?: string;
+    imageUrls?: string[];
     authorName: string;
+    chapterTitle?: string;
     createdAt: string;
   }>;
   audioClips: Array<{
@@ -301,6 +365,11 @@ export interface PublicBookSnapshot {
     audioUrl: string;
     createdByName: string;
     createdAt: string;
+  }>;
+  chapters?: Array<{
+    id: string;
+    title: string;
+    storyIds: string[];
   }>;
   updatedAt: Date;
 }

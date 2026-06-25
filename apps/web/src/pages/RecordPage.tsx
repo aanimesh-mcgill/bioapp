@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { PageHeading, PageSubheading, BilingualBtn } from '@/components/BilingualText';
-import { createStorySession } from '@/services/storySessions';
+import { useBook } from '@/context/BookContext';
+import { PageHeading, PageSubheading, BilingualBtn, T } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
+import { createStoryInBook } from '@/services/bookStructure';
+import { userDisplayName } from '@/lib/userDisplayName';
 
 export function RecordPage() {
   const { user, profile } = useAuth();
   const { activeBook } = useBook();
   const navigate = useNavigate();
+  const t = usePickText();
   const [title, setTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -15,14 +19,19 @@ export function RecordPage() {
     if (!user || !title.trim()) return;
     setSubmitting(true);
     try {
-      const sessionId = await createStorySession({
-        userId: user.uid,
-        title: title.trim(),
-        sourceType: 'freeform',
-        languageHint: profile?.preferences.defaultLanguage ?? 'mixed',
-        hindiOutputMode: profile?.preferences.hindiOutputMode ?? 'hindi_script',
-        perspective: profile?.preferences.storyPerspective ?? 'first',
-      });
+      const sessionId = await createStoryInBook(
+        {
+          userId: user.uid,
+          bookId: activeBook.id,
+          title: title.trim(),
+          sourceType: 'freeform',
+          languageHint: profile?.preferences.defaultLanguage ?? 'mixed',
+          hindiOutputMode: profile?.preferences.hindiOutputMode ?? 'hindi_script',
+          perspective: profile?.preferences.storyPerspective ?? 'first',
+        },
+        activeBook,
+        userDisplayName(user, profile),
+      );
       navigate(`/story/${sessionId}`);
     } finally {
       setSubmitting(false);
@@ -32,9 +41,12 @@ export function RecordPage() {
   if (!activeBook) {
     return (
       <div className="px-4 py-6">
-        <h1 className="mb-4 text-2xl font-bold text-brand-600">Record Story</h1>
+        <PageHeading en="Record Story" hi="कहानी रिकॉर्ड करें" className="mb-4" />
         <div className="card text-sm text-slate-600">
-          Select or create a book first from the Books page before recording.
+          <T
+            en="Select or create a book first from the Books page before recording."
+            hi="रिकॉर्ड करने से पहले पुस्तकें पृष्ठ से पुस्तक चुनें या बनाएं।"
+          />
         </div>
       </div>
     );
@@ -50,7 +62,10 @@ export function RecordPage() {
 
       <input
         className="input-field mb-6"
-        placeholder="Story title (e.g. My childhood in Delhi) / शीर्षक (जैसे दिल्ली में बचपन)"
+        placeholder={t({
+          en: 'Story title (e.g. My childhood in Delhi)',
+          hi: 'शीर्षक (जैसे दिल्ली में बचपन)',
+        })}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         disabled={submitting}

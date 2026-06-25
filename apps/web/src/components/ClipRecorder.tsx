@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import { useClipQueuePlayback } from '@/hooks/useClipQueuePlayback';
 import { MicPermissionHelp } from '@/components/MicPermissionHelp';
 import { ClipPlayButton } from '@/components/ClipPlayButton';
 import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
-import { clipStatusLabel } from '@/lib/bilingualUi';
+import { usePickText, useUiLocale } from '@/context/UiLocaleContext';
+import { clipStatusLabel, formatClipErrorMessage, isClipRemoved } from '@/lib/bilingualUi';
+import {
+  clipDisplayLabel,
+  clipsInNumberingScope,
+  defaultClipLabel,
+  isAutoClipLabel,
+  resolveClipNumber,
+} from '@/lib/clipDisplay';
+import { retryClipTranscription } from '@/services/storySessions';
 import type { AudioClip } from '@/types';
 
 function formatDuration(seconds: number) {
@@ -15,84 +25,239 @@ function formatDuration(seconds: number) {
 interface ClipListProps {
   clips: AudioClip[];
   clipOrder: string[];
+  /** When set, clip numbers are resolved within this subset (e.g. one prompt's clips). */
+  numberingScopeClips?: AudioClip[];
   onMoveUp: (clipId: string) => void;
   onMoveDown: (clipId: string) => void;
   onDelete: (clipId: string) => void;
+  onLabelChange?: (clipId: string, label: string) => void;
 }
 
-export function ClipList({ clips, clipOrder, onMoveUp, onMoveDown, onDelete }: ClipListProps) {
-  const ordered = clipOrder
-    .map((id) => clips.find((c) => c.id === id))
-    .filter(Boolean) as AudioClip[];
-  const repeatingOrdered =
-    ordered.length <= 1 ? ordered : [...ordered, ...ordered, ...ordered];
-  const baseCount = ordered.length;
+function ClipNameField({
+  clip,
+  clipNumber,
+  locale,
+  onLabelChange,
+}: {
+  clip: AudioClip;
+  clipNumber: number;
+  locale: ReturnType<typeof useUiLocale>['locale'];
+  onLabelChange?: (clipId: string, label: string) => void;
+}) {
+  const t = usePickText();
+  const resolvedName = clipDisplayLabel(clip, clipNumber, locale);
+  const [name, setName] = useState(resolvedName);
+
+  useEffect(() => {
+    setName(clipDisplayLabel(clip, clipNumber, locale));
+  }, [clip.id, clip.label, clipNumber, locale]);
+
+  return (
+    <input
+      type="text"
+      className="input-field w-full py-1 text-sm"
+      value={name}
+      placeholder={defaultClipLabel(clipNumber, locale)}
+      onChange={(e) => setName(e.target.value)}
+      onBlur={() => {
+        const trimmed = name.trim();
+        if (!trimmed || isAutoClipLabel(trimmed, locale)) {
+          if (clip.label?.trim()) onLabelChange?.(clip.id, '');
+          setName(defaultClipLabel(clipNumber, locale));
+          return;
+        }
+        if (trimmed !== clip.label?.trim()) onLabelChange?.(clip.id, trimmed);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+      }}
+      aria-label={t({ en: 'Clip name', hi: 'क्लिप का नाम' })}
+    />
+  );
+}
+
+export function ClipList({
+  clips,
+  clipOrder,
+  numberingScopeClips,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+  onLabelChange,
+}: ClipListProps) {
+  const t = usePickText();
+  const { locale } = useUiLocale();
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [displayOrder, setDisplayOrder] = useState(clipOrder);
+
+  useEffect(() => {
+    setDisplayOrder(clipOrder);
+  }, [clipOrder]);
+
+  const ordered = useMemo(
+    () =>
+      displayOrder
+        .map((id) => clips.find((c) => c.id === id))
+        .filter((c): c is AudioClip => Boolean(c) && !isClipRemoved(c!)),
+    [displayOrder, clips],
+  );
+
+  const numberingScope = useMemo(
+    () => numberingScopeClips ?? clipsInNumberingScope(clips, ordered),
+    [numberingScopeClips, clips, ordered],
+  );
+
+  const { audioRef, playingIndex, toggleClip } = useClipQueuePlayback(ordered);
 
   if (ordered.length === 0) return null;
 
+  const handleRetry = async (clipId: string) => {
+    setRetryingId(clipId);
+    try {
+      await retryClipTranscription(clipId);
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const handleDelete = (clipId: string) => {
+    setDisplayOrder((prev) => prev.filter((id) => id !== clipId));
+    onDelete(clipId);
+  };
+
+  const moveClip = (clipId: string, direction: 'up' | 'down') => {
+    setDisplayOrder((prev) => {
+      const next = [...prev];
+      const idx = next.indexOf(clipId);
+      if (idx < 0) return prev;
+      const swap = direction === 'up' ? idx - 1 : idx + 1;
+      if (swap < 0 || swap >= next.length) return prev;
+      [next[idx], next[swap]] = [next[swap], next[idx]];
+      return next;
+    });
+    if (direction === 'up') onMoveUp(clipId);
+    else onMoveDown(clipId);
+  };
+
   return (
     <div className="space-y-2">
+      <audio ref={audioRef} preload="metadata" className="hidden" />
       <BilingualLine
         en={`Recordings (${ordered.length})`}
         hi={`रिकॉर्डिंग (${ordered.length})`}
         enClass="text-sm font-semibold uppercase tracking-wide text-slate-500"
-        hiClass="text-xs text-slate-400"
+        hiClass="text-sm font-semibold text-slate-500"
       />
-      <div className="overflow-x-auto pt-1">
-        <div className="flex min-w-max gap-3">
-          {repeatingOrdered.map((clip, idx) => {
-            const normalizedIdx = idx % baseCount;
-            const showActions = baseCount <= 1 || (idx >= baseCount && idx < baseCount * 2);
-            return (
-              <div key={`${clip.id}-${idx}`} className="card flex w-80 shrink-0 items-center gap-3 py-3">
-                <ClipPlayButton audioUrl={clip.audioUrl} size="md" />
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
-                  {normalizedIdx + 1}
-                </span>
-                <div className="min-w-0 flex-1">
+      <p className="text-xs text-heritage-muted">
+        {t({
+          en: 'Top to bottom = playback order. Clip numbers stay fixed when you reorder.',
+          hi: 'ऊपर से नीचे = चलने का क्रम। क्रम बदलने पर क्लिप नंबर वही रहते हैं।',
+        })}
+      </p>
+      <div className="space-y-2">
+        {ordered.map((clip, idx) => {
+          const isPlaying = playingIndex === idx;
+          const canPlay = Boolean(clip.audioUrl);
+          const showStatus = clip.status !== 'ready';
+          const clipNumber = resolveClipNumber(clip, numberingScope);
+
+          return (
+            <div key={clip.id} className="card flex items-start gap-3 py-3">
+              <span
+                className={`mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                  isPlaying ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'
+                }`}
+                title={t({ en: 'Clip number (fixed)', hi: 'क्लिप नंबर (स्थिर)' })}
+              >
+                {clipNumber}
+              </span>
+              <button
+                type="button"
+                className={`mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base font-semibold ${
+                  canPlay
+                    ? isPlaying
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-brand-100 text-brand-700 hover:bg-brand-200'
+                    : 'cursor-not-allowed bg-slate-100 text-slate-300'
+                }`}
+                onClick={() => toggleClip(idx)}
+                disabled={!canPlay}
+                aria-label={isPlaying ? 'Pause clip' : 'Play clip'}
+              >
+                {isPlaying ? '⏸' : '▶'}
+              </button>
+              <div className="min-w-0 flex-1">
+                {onLabelChange ? (
+                  <ClipNameField
+                    clip={clip}
+                    clipNumber={clipNumber}
+                    locale={locale}
+                    onLabelChange={onLabelChange}
+                  />
+                ) : (
                   <p className="text-sm font-medium text-slate-800">
-                    {clip.label ?? `Clip ${normalizedIdx + 1} / क्लिप ${normalizedIdx + 1}`}
-                    {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
+                    {clipDisplayLabel(clip, clipNumber, locale)}
                   </p>
-                  <p className="text-xs text-slate-500">{clipStatusLabel(clip.status)}</p>
-                  {clip.transcript?.text && (
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-600">{clip.transcript.text}</p>
-                  )}
-                </div>
-                {showActions && (
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <button
-                      type="button"
-                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                      onClick={() => onMoveUp(clip.id)}
-                      disabled={normalizedIdx === 0}
-                      aria-label="Move up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                      onClick={() => onMoveDown(clip.id)}
-                      disabled={normalizedIdx === ordered.length - 1}
-                      aria-label="Move down"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-                      onClick={() => onDelete(clip.id)}
-                      aria-label="Delete clip"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                )}
+                <p className="mt-0.5 text-xs text-heritage-muted">
+                  {t({ en: `Play order: ${idx + 1}`, hi: `चलने का क्रम: ${idx + 1}` })}
+                  {clip.durationSeconds ? ` · ${formatDuration(clip.durationSeconds)}` : ''}
+                </p>
+                {showStatus && (
+                  <p className="text-xs text-slate-500">{clipStatusLabel(clip.status, locale)}</p>
+                )}
+                {clip.status === 'error' && clip.errorMessage && clip.errorMessage !== 'removed' && (
+                  <p className="mt-0.5 line-clamp-2 text-[10px] text-red-600">
+                    {formatClipErrorMessage(clip.errorMessage, locale)}
+                  </p>
+                )}
+                {clip.status === 'error' && (
+                  <button
+                    type="button"
+                    className="mt-1 text-xs font-semibold text-brand-600 underline"
+                    disabled={retryingId === clip.id}
+                    onClick={() => void handleRetry(clip.id)}
+                  >
+                    {retryingId === clip.id
+                      ? t({ en: 'Retrying…', hi: 'फिर कोशिश…' })
+                      : t({ en: 'Retry transcription', hi: 'फिर से प्रतिलेखन' })}
+                  </button>
+                )}
+                {clip.transcript?.text && (
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-600">{clip.transcript.text}</p>
                 )}
               </div>
-            );
-          })}
-        </div>
+              <div className="flex shrink-0 flex-col gap-0.5 pt-1">
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-base text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                  onClick={() => moveClip(clip.id, 'up')}
+                  disabled={idx === 0}
+                  aria-label="Move earlier in playback"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-base text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                  onClick={() => moveClip(clip.id, 'down')}
+                  disabled={idx === ordered.length - 1}
+                  aria-label="Move later in playback"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-base text-red-500 hover:bg-red-50"
+                  onClick={() => handleDelete(clip.id)}
+                  aria-label="Delete clip"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -101,9 +266,7 @@ export function ClipList({ clips, clipOrder, onMoveUp, onMoveDown, onDelete }: C
 interface ClipRecorderProps {
   onClipReady: (blob: Blob, duration: number) => void | Promise<void>;
   disabled?: boolean;
-  /** Save automatically when recording stops (no manual Save step). */
   autoSave?: boolean;
-  /** Hint shown when recordings already exist — user can add another segment. */
   hasExistingClip?: boolean;
 }
 
@@ -129,11 +292,11 @@ export function ClipRecorder({ onClipReady, disabled, autoSave, hasExistingClip 
     autoSavedBlobRef.current = blob;
     setSaving(true);
     Promise.resolve(onClipReady(blob, duration))
-      .then(() => reset())
-      .finally(() => {
-        setSaving(false);
+      .then(() => {
+        reset();
         autoSavedBlobRef.current = null;
-      });
+      })
+      .finally(() => setSaving(false));
   }, [autoSave, isRecording, blob, duration, onClipReady, reset, saving]);
 
   return (
@@ -171,8 +334,16 @@ export function ClipRecorder({ onClipReady, disabled, autoSave, hasExistingClip 
           />
         ) : (
           <BilingualLine
-            en={hasExistingClip ? 'Tap to record another segment — adds to the list above' : 'Tap Record — allow microphone when asked'}
-            hi={hasExistingClip ? 'और एक segment रिकॉर्ड करें — ऊपर की सूची में जुड़ेगा' : 'Record दबाएं — माइक की अनुमति दें'}
+            en={
+              hasExistingClip
+                ? 'Tap to record another segment — adds to the list above'
+                : 'Tap Record — allow microphone when asked'
+            }
+            hi={
+              hasExistingClip
+                ? 'और एक segment रिकॉर्ड करें — ऊपर की सूची में जुड़ेगा'
+                : 'Record दबाएं — माइक की अनुमति दें'
+            }
             enClass=""
             hiClass="text-slate-400"
           />
@@ -187,13 +358,11 @@ export function ClipRecorder({ onClipReady, disabled, autoSave, hasExistingClip 
 
       <div className="flex w-full flex-wrap items-center justify-center gap-3">
         {!isRecording && !blob && !saving && (
-          <button
-            type="button"
-            className="btn-primary flex-1 text-sm"
-            onClick={start}
-            disabled={disabled}
-          >
-            <BilingualBtn en={hasExistingClip ? 'Add Another Clip' : 'Record Clip'} hi={hasExistingClip ? 'और क्लिप जोड़ें' : 'क्लिप रिकॉर्ड'} />
+          <button type="button" className="btn-primary flex-1 text-sm" onClick={start} disabled={disabled}>
+            <BilingualBtn
+              en={hasExistingClip ? 'Add Another Clip' : 'Record Clip'}
+              hi={hasExistingClip ? 'और क्लिप जोड़ें' : 'क्लिप रिकॉर्ड'}
+            />
           </button>
         )}
         {isRecording && (

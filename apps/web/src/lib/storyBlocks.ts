@@ -1,4 +1,5 @@
-import { composeImageStoryReaderText, hasAnyPromptContent, mergeImagePromptAnswers, normalizePromptEntry } from '@/lib/imagePrompts';
+import { IMAGE_PROMPT_QUESTIONS } from '@/data/imagePromptQuestions';
+import { normalizePromptEntry, mergeImagePromptAnswers, composeImageStoryReaderText, hasAnyPromptContent } from '@/lib/imagePrompts';
 import type {
   AudioClip,
   ImagePromptAnswers,
@@ -12,6 +13,40 @@ import type {
 
 export function newBlockId(): string {
   return crypto.randomUUID();
+}
+
+function legacyTextBlockId(sessionId: string): string {
+  return `legacy-text-${sessionId}`;
+}
+
+function legacyImageBlockId(sessionId: string): string {
+  return `legacy-image-${sessionId}`;
+}
+
+function legacyClipBlockId(sessionId: string): string {
+  return `legacy-clips-${sessionId}`;
+}
+
+/** Legacy imageStimulus prompts apply only to the matching image block, not every photo. */
+function shouldMergeLegacyImagePrompts(block: StoryImageBlock, session: StorySession): boolean {
+  const stim = session.imageStimulus;
+  if (!stim?.prompts || Object.keys(stim.prompts).length === 0) return false;
+
+  const matchesStimulus =
+    (stim.imageUrl && block.imageUrl === stim.imageUrl) ||
+    (stim.imageStoragePath && block.imageStoragePath === stim.imageStoragePath);
+  if (!matchesStimulus) return false;
+
+  const hasOwnContent = Object.values(block.prompts ?? {}).some((entry) => {
+    const n = normalizePromptEntry(entry);
+    return (
+      (n.clipOrder?.length ?? 0) > 0 ||
+      Boolean(n.draftText?.trim()) ||
+      Boolean(n.finalText?.trim()) ||
+      n.skipped
+    );
+  });
+  return !hasOwnContent;
 }
 
 export function createTextBlock(data: TextStimulusData): StoryTextBlock {
@@ -43,19 +78,26 @@ export function resolveStoryBlocks(session: StorySession): {
   if (session.contentBlockOrder?.length && session.contentBlocks) {
     const order = session.contentBlockOrder;
     const blocks = { ...session.contentBlocks };
+    let legacySessionClipsAssigned = false;
 
     for (const blockId of order) {
       const block = blocks[blockId];
       if (!block) continue;
 
-      if (block.type === 'text' && block.clipOrder.length === 0 && session.clipOrder.length > 0) {
+      if (
+        block.type === 'text' &&
+        block.clipOrder.length === 0 &&
+        session.clipOrder.length > 0 &&
+        !legacySessionClipsAssigned
+      ) {
         blocks[blockId] = { ...block, clipOrder: [...session.clipOrder] };
+        legacySessionClipsAssigned = true;
       }
 
-      if (block.type === 'image' && session.imageStimulus?.prompts) {
+      if (block.type === 'image' && shouldMergeLegacyImagePrompts(block, session)) {
         blocks[blockId] = {
           ...block,
-          prompts: mergeImagePromptAnswers(block.prompts ?? {}, session.imageStimulus.prompts),
+          prompts: mergeImagePromptAnswers(block.prompts ?? {}, session.imageStimulus!.prompts ?? {}),
         };
       }
     }
@@ -67,7 +109,7 @@ export function resolveStoryBlocks(session: StorySession): {
   const order: string[] = [];
 
   if (session.textStimulus) {
-    const id = newBlockId();
+    const id = legacyTextBlockId(session.id);
     blocks[id] = {
       id,
       type: 'text',
@@ -80,7 +122,7 @@ export function resolveStoryBlocks(session: StorySession): {
   }
 
   if (session.imageStimulus) {
-    const id = newBlockId();
+    const id = legacyImageBlockId(session.id);
     blocks[id] = {
       id,
       type: 'image',
@@ -95,7 +137,7 @@ export function resolveStoryBlocks(session: StorySession): {
   }
 
   if (order.length === 0 && session.clipOrder.length > 0) {
-    const id = newBlockId();
+    const id = legacyClipBlockId(session.id);
     blocks[id] = {
       id,
       type: 'text',
@@ -108,20 +150,73 @@ export function resolveStoryBlocks(session: StorySession): {
   return { order, blocks, migrated: order.length > 0 };
 }
 
-export function blockLabel(block: StoryContentBlock): string {
+export function blockLabel(block: StoryContentBlock, photoFallback = 'Photo'): string {
   if (block.type === 'text') {
     const preview = block.content.slice(0, 48);
     return preview + (block.content.length > 48 ? '…' : '');
   }
-  return block.title?.trim() || 'Photo / फोटो';
+  return block.title?.trim() || photoFallback;
+}
+
+export function findPromptKeyForClip(
+  block: StoryImageBlock,
+  clipId: string,
+): keyof ImagePromptAnswers | null {
+  for (const { key } of IMAGE_PROMPT_QUESTIONS) {
+    const entry = normalizePromptEntry(block.prompts[key]);
+    if (entry.clipOrder?.includes(clipId)) return key;
+  }
+  return null;
+}
+
+export function imageBlockClipOrder(block: StoryImageBlock, clips: AudioClip[]): string[] {
+  const defaultIds = defaultImageBlockClipIds(block, clips);
+  if (!block.clipOrder?.length) return defaultIds;
+
+  const valid = new Set(defaultIds);
+  const fromSaved = block.clipOrder.filter((id) => valid.has(id));
+  const missing = defaultIds.filter((id) => !fromSaved.includes(id));
+  return [...fromSaved, ...missing];
+}
+
+function defaultImageBlockClipIds(block: StoryImageBlock, clips: AudioClip[]): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+
+  for (const { key } of IMAGE_PROMPT_QUESTIONS) {
+    const entry = normalizePromptEntry(block.prompts[key]);
+    for (const id of entry.clipOrder ?? []) {
+      if (seen.has(id)) continue;
+      const clip = clips.find((c) => c.id === id);
+      if (clip && clip.errorMessage !== 'removed') {
+        ids.push(id);
+        seen.add(id);
+      }
+    }
+  }
+
+  const orphans = clips
+    .filter((c) => c.blockId === block.id && !seen.has(c.id) && c.errorMessage !== 'removed')
+    .sort((a, b) => a.order - b.order);
+  for (const c of orphans) {
+    ids.push(c.id);
+  }
+
+  return ids;
 }
 
 export function blockClipIds(block: StoryContentBlock): string[] {
   if (block.type === 'text') return block.clipOrder;
   const ids: string[] = [];
+  const seen = new Set<string>();
   for (const key of Object.keys(block.prompts) as (keyof typeof block.prompts)[]) {
     const entry = normalizePromptEntry(block.prompts[key]);
-    ids.push(...(entry.clipOrder ?? []));
+    for (const id of entry.clipOrder ?? []) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
   }
   return ids;
 }
@@ -183,7 +278,17 @@ export function blockTimelineMs(block: StoryContentBlock, fallbackMs: number): n
   return fallbackMs;
 }
 
-export function clipsForBlock(clips: AudioClip[], block: StoryContentBlock): AudioClip[] {
+export function clipsForBlock(
+  clips: AudioClip[],
+  block: StoryContentBlock,
+  allBlocks?: Record<string, StoryContentBlock>,
+): AudioClip[] {
+  if (block.type === 'image') {
+    return imageBlockClipOrder(block, clips)
+      .map((id) => clips.find((c) => c.id === id && c.errorMessage !== 'removed'))
+      .filter(Boolean) as AudioClip[];
+  }
+
   const ids = blockClipIds(block);
   const byId = ids
     .map((id) => clips.find((c) => c.id === id && c.errorMessage !== 'removed'))
@@ -195,22 +300,36 @@ export function clipsForBlock(clips: AudioClip[], block: StoryContentBlock): Aud
 
   const merged: AudioClip[] = [];
   const seen = new Set<string>();
-  for (const c of [...byId, ...byBlock]) {
-    if (!seen.has(c.id)) {
-      seen.add(c.id);
-      merged.push(c);
+  const add = (c: AudioClip | undefined) => {
+    if (!c || c.errorMessage === 'removed' || seen.has(c.id)) return;
+    seen.add(c.id);
+    merged.push(c);
+  };
+
+  for (const c of byId) add(c);
+  for (const c of byBlock) add(c);
+
+  if (block.type === 'text') {
+    const textBlocks = allBlocks
+      ? Object.values(allBlocks).filter((b) => b.type === 'text')
+      : [];
+    const soleTextBlock = textBlocks.length === 1 && textBlocks[0].id === block.id;
+
+    if (soleTextBlock || merged.length === 0) {
+      for (const c of clips) {
+        if (!c.blockId && !c.promptKey) add(c);
+      }
+    }
+
+    if (soleTextBlock && allBlocks) {
+      const knownIds = new Set(Object.keys(allBlocks));
+      for (const c of clips) {
+        if (c.blockId && !knownIds.has(c.blockId) && !c.promptKey) add(c);
+      }
     }
   }
 
-  if (merged.length > 0) return merged.sort((a, b) => a.order - b.order);
-
-  if (block.type === 'text') {
-    return clips
-      .filter((c) => !c.blockId && !c.promptKey && c.errorMessage !== 'removed')
-      .sort((a, b) => a.order - b.order);
-  }
-
-  return [];
+  return merged.sort((a, b) => a.order - b.order);
 }
 
 export function clipsForPrompt(
@@ -227,7 +346,7 @@ export function clipsForPrompt(
     (c) =>
       c.errorMessage !== 'removed' &&
       c.promptKey === promptKey &&
-      (c.blockId === block.id || !c.blockId),
+      c.blockId === block.id,
   );
 
   const merged: AudioClip[] = [];
@@ -242,8 +361,36 @@ export function clipsForPrompt(
   return merged.sort((a, b) => a.order - b.order);
 }
 
-export function textBlockClipOrder(block: StoryTextBlock, clips: AudioClip[]): string[] {
-  const resolved = clipsForBlock(clips, block);
+export function textBlockClipOrder(
+  block: StoryTextBlock,
+  clips: AudioClip[],
+  allBlocks?: Record<string, StoryContentBlock>,
+): string[] {
+  const resolved = clipsForBlock(clips, block, allBlocks);
   if (resolved.length > 0) return resolved.map((c) => c.id);
   return block.clipOrder;
+}
+
+/** All clip IDs for a story — session-level plus every content block. */
+export function storyClipIds(session: StorySession): string[] {
+  const { order, blocks } = resolveStoryBlocks(session);
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const push = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  for (const blockId of order) {
+    const block = blocks[blockId];
+    if (block) {
+      for (const id of blockClipIds(block)) push(id);
+    }
+  }
+  for (const id of session.clipOrder) push(id);
+  return ids;
+}
+
+export function storyClipCount(session: StorySession): number {
+  return storyClipIds(session).length;
 }

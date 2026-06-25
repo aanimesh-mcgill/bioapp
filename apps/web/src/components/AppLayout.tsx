@@ -1,5 +1,6 @@
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { ActiveBookBar } from '@/components/ActiveBookBar';
 import { BottomNav } from '@/components/BottomNav';
 
 export function AppLayout() {
@@ -16,9 +17,12 @@ export function AppLayout() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="mx-auto min-h-dvh max-w-lg pb-20">
-      <Outlet />
+    <>
+      <div className="relative mx-auto min-h-dvh max-w-lg bg-heritage-cream pb-24">
+        <ActiveBookBar />
+        <Outlet />
+      </div>
       <BottomNav />
-    </div>
+    </>
   );
 }

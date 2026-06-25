@@ -34,6 +34,14 @@
       ]
     },
     {
+      "collectionGroup": "contributorInvites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "contributorUserId", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "storySessions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -47,6 +55,15 @@
       "fields": [
         { "fieldPath": "bookId", "order": "ASCENDING" },
         { "fieldPath": "publicSlug", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "storySessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "bookOwnerId", "order": "ASCENDING" },
+        { "fieldPath": "isContributorStory", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
     },
     {
@@ -114,6 +131,14 @@
       ]
     },
     {
+      "collectionGroup": "bookInvitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "bookId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "bookStories",
       "queryScope": "COLLECTION",
       "fields": [
@@ -122,11 +147,19 @@
       ]
     },
     {
-      "collectionGroup": "bookAudioClips",
+      "collectionGroup": "books",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "bookId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "collabBookId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "books",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "publicSlug", "order": "ASCENDING" },
+        { "fieldPath": "isPublished", "order": "ASCENDING" }
       ]
     }
   ],

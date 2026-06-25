@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/context/AuthContext';
 
 import {
 
   subscribeToSession,
+
+  subscribeToClips,
 
   updateSessionDraft,
 
@@ -26,22 +28,21 @@ import {
 
   removeAttachment,
 
-  getOrCreateBook,
-
 } from '@/services/books';
 
 import { ImageStimulusPromptsEditor } from '@/components/ImageStimulusPromptsEditor';
 
-import { SectionHeading, BilingualBtn, BilingualLine } from '@/components/BilingualText';
+import { SectionHeading, BilingualBtn, BilingualLine, T } from '@/components/BilingualText';
 
-import { QrCodeDisplay } from '@/components/QrCodeDisplay';
+import { usePickText } from '@/context/UiLocaleContext';
 
-import { storyPublicUrl } from '@/lib/slug';
+import { SpreadClipPlayer } from '@/components/SpreadClipPlayer';
 
-import { userDisplayName } from '@/lib/userDisplayName';
+import { StoryContentView } from '@/components/StoryContentView';
 
-import { resolveStoryBlocks, imageBlockAsStimulus } from '@/lib/storyBlocks';
-import type { StorySession } from '@/types';
+import { resolveStoryBlocks, imageBlockAsStimulus, storyClipIds } from '@/lib/storyBlocks';
+import { isContributorStorySubmitted } from '@/lib/contributorStories';
+import type { StorySession, AudioClip } from '@/types';
 
 
 
@@ -51,7 +52,16 @@ export function StoryDetailPage() {
 
   const { user, profile } = useAuth();
 
+  const location = useLocation();
+  const navigate = useNavigate();
+  const contributeBack = (location.state as { fromContributeHub?: string } | null)?.fromContributeHub;
+  const canHistoryBack = location.key !== 'default';
+
+  const t = usePickText();
+
   const [session, setSession] = useState<StorySession | null>(null);
+
+  const [clips, setClips] = useState<AudioClip[]>([]);
 
   const [draft, setDraft] = useState('');
 
@@ -63,11 +73,13 @@ export function StoryDetailPage() {
 
   const [actionMsg, setActionMsg] = useState('');
 
-  const [bookSlug, setBookSlug] = useState('');
-
   const [linkUrl, setLinkUrl] = useState('');
 
   const [linkTitle, setLinkTitle] = useState('');
+
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+
+  const [mediaUploading, setMediaUploading] = useState(false);
 
 
 
@@ -92,15 +104,13 @@ export function StoryDetailPage() {
   }, [sessionId]);
 
 
-
   useEffect(() => {
 
-    if (!user) return;
+    if (!sessionId) return;
 
-    getOrCreateBook(user.uid, userDisplayName(user, profile)).then((b) => setBookSlug(b.publicSlug));
+    return subscribeToClips(sessionId, setClips);
 
-  }, [user, profile]);
-
+  }, [sessionId]);
 
 
   if (!session) {
@@ -122,17 +132,33 @@ export function StoryDetailPage() {
   const isHindi = session.outputLanguage === 'hi';
 
   const isBuyer = profile?.role === 'buyer' || profile?.role === 'admin';
-
-  const storyQrUrl =
-    session.publicSlug && bookSlug
-      ? storyPublicUrl(bookSlug, session.publicSlug)
-      : null;
+  const isStoryOwner = user?.uid === session.userId;
+  const isBookOwner = user?.uid === session.bookOwnerId;
+  const contributorViewOnly =
+    !!session.isContributorStory &&
+    isContributorStorySubmitted(session) &&
+    isStoryOwner &&
+    !isBookOwner;
+  const canApproveStory =
+    session.status === 'pending_approval' &&
+    !contributorViewOnly &&
+    (isBuyer || isBookOwner || (isStoryOwner && !session.isContributorStory));
 
   const { order, blocks } = resolveStoryBlocks(session);
+  const hasContentBlocks = order.length > 0;
   const imageBlock = order.map((id) => blocks[id]).find((b) => b?.type === 'image');
   const photoStimulus =
-    session.imageStimulus ??
-    (imageBlock?.type === 'image' ? imageBlockAsStimulus(imageBlock) : null);
+    !hasContentBlocks &&
+    (session.imageStimulus ??
+      (imageBlock?.type === 'image' ? imageBlockAsStimulus(imageBlock) : null));
+
+  const orderedClips = storyClipIds(session)
+    .map((id) => clips.find((c) => c.id === id && c.errorMessage !== 'removed'))
+    .filter(Boolean) as AudioClip[];
+
+  const playableClips = orderedClips.filter((c) => c.audioUrl);
+
+  const pendingClips = orderedClips.filter((c) => !c.audioUrl);
 
 
 
@@ -146,7 +172,7 @@ export function StoryDetailPage() {
 
       await updateSessionDraft(sessionId, draft);
 
-      setActionMsg('Draft saved. / ड्राफ्ट सहेजा गया।');
+      setActionMsg(t({ en: 'Draft saved.', hi: 'ड्राफ्ट सहेजा गया।' }));
 
     } finally {
 
@@ -168,7 +194,7 @@ export function StoryDetailPage() {
 
       await updateEditedTranscript(sessionId, transcript);
 
-      setActionMsg('Transcript saved. / प्रतिलेख सहेजा गया।');
+      setActionMsg(t({ en: 'Transcript saved.', hi: 'प्रतिलेख सहेजा गया।' }));
 
     } finally {
 
@@ -190,7 +216,35 @@ export function StoryDetailPage() {
 
     setLinkTitle('');
 
-    setActionMsg('Link added. / लिंक जोड़ा गया।');
+    setActionMsg(t({ en: 'Link added.', hi: 'लिंक जोड़ा गया।' }));
+
+  };
+
+
+
+  const handleUploadMedia = async () => {
+
+    if (!sessionId || !user || !mediaFile) return;
+
+    setMediaUploading(true);
+
+    try {
+
+      await uploadStoryAttachment(user.uid, sessionId, mediaFile);
+
+      setMediaFile(null);
+
+      setActionMsg(t({ en: 'Media saved.', hi: 'मीडिया सहेजा गया।' }));
+
+    } catch {
+
+      setActionMsg(t({ en: 'Upload failed. Try again.', hi: 'अपलोड विफल। फिर कोशिश करें।' }));
+
+    } finally {
+
+      setMediaUploading(false);
+
+    }
 
   };
 
@@ -202,7 +256,7 @@ export function StoryDetailPage() {
 
     await approveSession(sessionId, buyerNotes);
 
-    setActionMsg('Story approved! / कहानी स्वीकृत!');
+    setActionMsg(t({ en: 'Story approved!', hi: 'कहानी स्वीकृत!' }));
 
   };
 
@@ -214,7 +268,7 @@ export function StoryDetailPage() {
 
     await rejectSession(sessionId, buyerNotes);
 
-    setActionMsg('Sent back for revision. / संशोधन के लिए भेजा गया।');
+    setActionMsg(t({ en: 'Sent back for revision.', hi: 'संशोधन के लिए भेजा गया।' }));
 
   };
 
@@ -224,11 +278,19 @@ export function StoryDetailPage() {
 
     <div className="px-4 py-6">
 
-      <Link to="/stories" className="mb-4 inline-block text-sm text-brand-600">
-
-        ← Back to stories / कहानियों पर वापस
-
-      </Link>
+      {contributeBack ? (
+        <Link to={contributeBack} className="mb-4 inline-block text-sm text-brand-600">
+          ← {t({ en: 'Back to contributions', hi: 'योगदान पर वापस' })}
+        </Link>
+      ) : canHistoryBack ? (
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="mb-4 inline-block text-sm text-brand-600"
+        >
+          ← {t({ en: 'Back', hi: 'वापस' })}
+        </button>
+      ) : null}
 
 
 
@@ -246,6 +308,17 @@ export function StoryDetailPage() {
 
 
 
+      {contributorViewOnly && (
+        <div className="card mb-4 border-l-4 border-l-green-500 py-3">
+          <p className="text-sm text-heritage-ink">
+            {t({
+              en: 'Submitted to the book owner. You can view your copy here but cannot edit it.',
+              hi: 'पुस्तक स्वामी को जमा कर दी गई। आप यहाँ प्रति देख सकते हैं, संपादित नहीं कर सकते।',
+            })}
+          </p>
+        </div>
+      )}
+
       {session.contributorName && (
 
         <div className="card mb-4 border-l-4 border-l-accent-400">
@@ -262,39 +335,15 @@ export function StoryDetailPage() {
 
 
 
-      {storyQrUrl && (
+      {hasContentBlocks && <StoryContentView session={session} clips={clips} />}
 
-        <div className="card mb-4 flex flex-col items-center">
-
-          <QrCodeDisplay
-
-            url={storyQrUrl}
-
-            label="QR — scan to read & hear this story / QR — कहानी पढ़ने और सुनने के लिए स्कैन करें"
-
-            size={140}
-
-          />
-
-          <BilingualLine
-
-            en="Place this QR on the photo or stimulus — opens the story with audio"
-
-            hi="इस QR को फोटो या उद्दीपक पर लगाएं — ऑडियो के साथ कहानी खुलेगी"
-
-            enClass="mt-2 text-center text-xs text-slate-500"
-
-            hiClass="text-center text-xs text-slate-400"
-
-          />
-
-        </div>
-
+      {hasContentBlocks && !contributorViewOnly && session.status !== 'approved' && (
+        <Link to={`/story/${session.id}`} className="mb-4 inline-block text-sm text-brand-600">
+          {t({ en: 'Edit story content →', hi: 'कहानी संपादित करें →' })}
+        </Link>
       )}
 
-
-
-      {photoStimulus && user && (
+      {photoStimulus && user && !contributorViewOnly && (
         <section className="mb-4">
           <img
             src={photoStimulus.imageUrl}
@@ -307,13 +356,73 @@ export function StoryDetailPage() {
             sessionId={session.id}
             userId={user.uid}
             showImagePreview={false}
-            onSaved={() => setActionMsg('Photo answers saved. / फोटो उत्तर सहेजे गए।')}
+            onSaved={() => setActionMsg(t({ en: 'Photo answers saved.', hi: 'फोटो उत्तर सहेजे गए।' }))}
           />
         </section>
       )}
 
 
 
+      {!hasContentBlocks && orderedClips.length > 0 && (
+
+        <section className="card mb-4">
+
+          <SectionHeading en="Voice recordings" hi="आवाज़ रिकॉर्डिंग" />
+
+          {playableClips.length > 0 ? (
+
+            <SpreadClipPlayer clips={orderedClips} />
+
+          ) : (
+
+            <p className="text-sm text-amber-700">
+
+              {t({
+
+                en: `${pendingClips.length} recording(s) could not be played — upload may still be in progress or failed.`,
+
+                hi: `${pendingClips.length} रिकॉर्डिंग चल नहीं सकी — अपलोड अधूरा या विफल हो सकता है।`,
+
+              })}
+
+            </p>
+
+          )}
+
+          {pendingClips.length > 0 && playableClips.length > 0 && (
+
+            <p className="mt-2 text-xs text-slate-500">
+
+              {t({
+
+                en: `${pendingClips.length} clip(s) still processing.`,
+
+                hi: `${pendingClips.length} क्लिप अभी प्रोसेस हो रही है।`,
+
+              })}
+
+            </p>
+
+          )}
+
+          {session.status !== 'approved' && !contributorViewOnly && (
+
+            <Link to={`/story/${session.id}`} className="mt-3 inline-block text-sm text-brand-600">
+
+              {t({ en: 'Re-record in story editor →', hi: 'कहानी संपादक में फिर रिकॉर्ड करें →' })}
+
+            </Link>
+
+          )}
+
+        </section>
+
+      )}
+
+
+
+      {!contributorViewOnly && (
+      <>
       <section className="card mb-4">
 
         <SectionHeading en="Transcript (editable)" hi="प्रतिलेख (संपादन योग्य)" />
@@ -404,7 +513,7 @@ export function StoryDetailPage() {
 
             <button type="button" className="text-xs text-red-500" onClick={() => sessionId && removeAttachment(sessionId, att.id)}>
 
-              Remove / हटाएं
+              <T en="Remove" hi="हटाएं" />
 
             </button>
 
@@ -432,27 +541,45 @@ export function StoryDetailPage() {
 
           className="input-field mb-3"
 
-          onChange={async (e) => {
-
-            const file = e.target.files?.[0];
-
-            if (file && sessionId && user) {
-
-              await uploadStoryAttachment(user.uid, sessionId, file);
-
-              setActionMsg('Media added. / मीडिया जोड़ा गया।');
-
-            }
-
-          }}
+          onChange={(e) => setMediaFile(e.target.files?.[0] ?? null)}
 
         />
 
+        {mediaFile && (
+
+          <p className="mb-2 text-xs text-slate-600">{mediaFile.name}</p>
+
+        )}
+
+        <button
+
+          type="button"
+
+          className="btn-primary mb-3 w-full"
+
+          onClick={handleUploadMedia}
+
+          disabled={!mediaFile || mediaUploading}
+
+        >
+
+          {mediaUploading ? (
+
+            <BilingualBtn en="Uploading…" hi="अपलोड हो रहा…" />
+
+          ) : (
+
+            <BilingualBtn en="Save media" hi="मीडिया सहेजें" />
+
+          )}
+
+        </button>
+
         <div className="flex gap-2">
 
-          <input className="input-field flex-1" placeholder="Link URL / लिंक URL" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+          <input className="input-field flex-1" placeholder={t({ en: 'Link URL', hi: 'लिंक URL' })} value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
 
-          <input className="input-field flex-1" placeholder="Title / शीर्षक" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} />
+          <input className="input-field flex-1" placeholder={t({ en: 'Title', hi: 'शीर्षक' })} value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} />
 
         </div>
 
@@ -463,20 +590,28 @@ export function StoryDetailPage() {
         </button>
 
       </section>
+      </>
+      )}
 
 
 
-      {isBuyer && session.status === 'pending_approval' && (
+      {canApproveStory && (
 
         <section className="card">
 
-          <SectionHeading en="Buyer Review" hi="खरीदार समीक्षा" />
+          <SectionHeading en="Approve story" hi="कहानी स्वीकृत करें" />
+
+          <p className="mb-3 text-sm text-slate-600">
+            {session.isContributorStory
+              ? 'Review this contributor story, then approve it for your book.'
+              : 'Your draft is ready. Approve it to mark it complete and include it in your book.'}
+          </p>
 
           <textarea
 
             className="input-field mb-3 min-h-[80px]"
 
-            placeholder="Notes (required for rejection) / नोट (अस्वीकृति के लिए आवश्यक)"
+            placeholder={t({ en: 'Optional notes', hi: 'वैकल्पिक नोट' })}
 
             value={buyerNotes}
 

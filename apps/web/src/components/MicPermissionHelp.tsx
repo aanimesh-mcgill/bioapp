@@ -1,4 +1,4 @@
-import { BilingualLine } from '@/components/BilingualText';
+import { BilingualBtn, BilingualLine, T } from '@/components/BilingualText';
 import { micErrorMessages, type MicErrorKind } from '@/lib/mediaPermissions';
 
 interface MicPermissionHelpProps {
@@ -11,21 +11,21 @@ export function MicPermissionHelp({ kind, onRetry }: MicPermissionHelpProps) {
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs">
-      <BilingualLine en={msg.en} hi={msg.hi} enClass="font-medium text-amber-900" hiClass="mt-1 text-amber-800" />
+      <BilingualLine en={msg.en} hi={msg.hi} enClass="font-medium text-amber-900" hiClass="font-medium text-amber-900" />
 
       {kind === 'denied' && (
         <ul className="mt-2 list-inside list-disc space-y-1 text-amber-800">
           <li>
-            iPhone Safari: address bar → aA → Website Settings → Microphone → Allow
-            <span className="font-hindi block text-[11px] text-amber-700">
-              iPhone: पता पट्टी → aA → वेबसाइट सेटिंग्स → माइक्रोफ़ोन → Allow
-            </span>
+            <T
+              en="iPhone Safari: address bar → aA → Website Settings → Microphone → Allow"
+              hi="iPhone: पता पट्टी → aA → वेबसाइट सेटिंग्स → माइक्रोफ़ोन → Allow"
+            />
           </li>
           <li>
-            Android Chrome: lock icon → Permissions → Microphone → Allow
-            <span className="font-hindi block text-[11px] text-amber-700">
-              Android: ताला आइकन → अनुमतियाँ → माइक्रोफ़ोन → Allow
-            </span>
+            <T
+              en="Android Chrome: lock icon → Permissions → Microphone → Allow"
+              hi="Android: ताला आइकन → अनुमतियाँ → माइक्रोफ़ोन → Allow"
+            />
           </li>
         </ul>
       )}
@@ -41,7 +41,7 @@ export function MicPermissionHelp({ kind, onRetry }: MicPermissionHelpProps) {
 
       {onRetry && (
         <button type="button" className="btn-primary mt-3 w-full py-2 text-xs" onClick={onRetry}>
-          Try again / फिर कोशिश करें
+          <BilingualBtn en="Try again" hi="फिर कोशिश करें" />
         </button>
       )}
     </div>

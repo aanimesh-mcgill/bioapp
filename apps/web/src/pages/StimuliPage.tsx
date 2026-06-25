@@ -1,124 +1,230 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { AUTOBIOGRAPHY_STIMULI, getNextStimulus, bilingualStimulusPrompt } from '@/data/stimuli';
-import { createStorySession } from '@/services/storySessions';
-import { BilingualLine, PageHeading } from '@/components/BilingualText';
-import type { Stimulus } from '@/types';
+import { usePickText, useUiLocale } from '@/context/UiLocaleContext';
+import {
+  getNextPrompt,
+  PROMPT_TEMPLATES,
+  promptCategory,
+  promptText,
+  promptTitle,
+} from '@/data/stimuli';
+import { useBook } from '@/context/BookContext';
+import { useBookPrompts } from '@/hooks/useBookPrompts';
+import { createStoryInBook } from '@/services/bookStructure';
+import { importPromptTemplate, deleteBookPrompt } from '@/services/bookPrompts';
+import { userDisplayName } from '@/lib/userDisplayName';
+import { AddBookPromptModal } from '@/components/AddBookPromptModal';
+import { HeritagePageTitle } from '@/components/heritage/HeritageHeader';
+import { T } from '@/components/BilingualText';
+import type { BookPrompt } from '@/types';
 
 export function StimuliPage() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const completed = profile?.stimulusProgress?.completedStimulusIds ?? [];
-  const next = getNextStimulus(completed);
+  const t = usePickText();
+  const { locale } = useUiLocale();
+  const { activeBook } = useBook();
+  const { prompts, completedIds, loading, bookId, userId } = useBookPrompts();
+  const [showAdd, setShowAdd] = useState(false);
+  const [editPrompt, setEditPrompt] = useState<BookPrompt | null>(null);
+  const [importing, setImporting] = useState(false);
 
-  const startStimulus = async (stimulus: Stimulus) => {
-    if (!user) return;
-    const sessionId = await createStorySession({
-      userId: user.uid,
-      title: `${stimulus.titleEn} / ${stimulus.titleHi}`,
-      sourceType: 'stimulus',
-      stimulusId: stimulus.id,
-      stimulusPrompt: bilingualStimulusPrompt(stimulus),
-      languageHint: profile?.preferences.defaultLanguage ?? 'mixed',
-      hindiOutputMode: profile?.preferences.hindiOutputMode ?? 'hindi_script',
-      perspective: profile?.preferences.storyPerspective ?? 'first',
-    });
+  const next = getNextPrompt(prompts, completedIds);
+  const isOwner = activeBook?.ownerId === user?.uid;
+  const doneCount = completedIds.length;
+  const total = prompts.length;
+  const progressPct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  const startPrompt = async (prompt: BookPrompt) => {
+    if (!user || !activeBook) return;
+    const sessionId = await createStoryInBook(
+      {
+        userId: user.uid,
+        bookId: activeBook.id,
+        title: promptTitle(prompt, locale),
+        sourceType: 'stimulus',
+        stimulusId: prompt.id,
+        stimulusPrompt: promptText(prompt, locale),
+        languageHint: profile?.preferences.defaultLanguage ?? 'mixed',
+        hindiOutputMode: profile?.preferences.hindiOutputMode ?? 'hindi_script',
+        perspective: profile?.preferences.storyPerspective ?? 'first',
+      },
+      activeBook,
+      userDisplayName(user, profile),
+    );
     navigate(`/story/${sessionId}`);
   };
 
-  return (
-    <div className="px-4 py-6">
-      <PageHeading en="Life Story Prompts" hi="जीवन कथा प्रश्न" />
-      <div className="mb-6 mt-2">
-        <p className="text-sm text-slate-600">
-          Complete each prompt to build your autobiography. {completed.length} of{' '}
-          {AUTOBIOGRAPHY_STIMULI.length} done.
-        </p>
-        <p className="font-hindi text-sm text-slate-500">
-          अपनी आत्मकथा बनाने के लिए प्रत्येक प्रश्न पूरा करें। {completed.length} /{' '}
-          {AUTOBIOGRAPHY_STIMULI.length} पूर्ण।
-        </p>
-      </div>
+  const handleImportAutobiography = async () => {
+    if (!bookId || !userId) return;
+    setImporting(true);
+    try {
+      await importPromptTemplate(bookId, userId, 'autobiography');
+    } finally {
+      setImporting(false);
+    }
+  };
 
-      {next && (
-        <button
-          type="button"
-          className="card mb-6 w-full border-2 border-accent-400 bg-accent-50/30 text-left active:scale-[0.99] transition"
-          onClick={() => startStimulus(next)}
-        >
-          <BilingualLine
-            en="Up next"
-            hi="अगला"
-            enClass="mb-1 text-xs font-semibold uppercase tracking-wide text-accent-600"
-            hiClass="mb-2 text-xs font-semibold text-accent-500"
-          />
-          <BilingualLine
-            en={next.titleEn}
-            hi={next.titleHi}
-            enClass="font-semibold text-brand-700"
-            hiClass="text-sm text-slate-600"
-          />
-          <div className="mt-2">
-            <p className="text-sm text-slate-700">{next.promptEn}</p>
-            <p className="mt-1 font-hindi text-sm text-slate-600">{next.promptHi}</p>
+  const handleDelete = async (prompt: BookPrompt) => {
+    if (!bookId || prompt.source === 'system') return;
+    if (!window.confirm(t({ en: 'Delete this prompt?', hi: 'यह प्रश्न हटाएं?' }))) return;
+    await deleteBookPrompt(bookId, prompt.id);
+  };
+
+  if (loading) {
+    return (
+      <div className="heritage-page text-center text-heritage-muted">
+        <T en="Loading prompts…" hi="प्रश्न लोड हो रहे…" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="heritage-page">
+      <HeritagePageTitle
+        en="Prompts"
+        hi="प्रश्न"
+        subtitle={{ en: 'Twelve questions', hi: 'बारह सवाल' }}
+      />
+
+      {total > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 flex justify-between text-xs font-medium text-heritage-muted">
+            <span className={locale === 'hi' ? 'font-hindi' : ''}>
+              {t({ en: `${doneCount} of ${total} complete`, hi: `${doneCount} / ${total} पूर्ण` })}
+            </span>
+            <span>
+              {String(doneCount).padStart(2, '0')} / {String(total).padStart(2, '0')}
+            </span>
           </div>
-          <p className="btn-primary mt-4 w-full text-center pointer-events-none">
-            Start This Prompt / इस प्रश्न से शुरू करें
-          </p>
-        </button>
+          <div className="h-1.5 overflow-hidden rounded-full bg-heritage-line">
+            <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${progressPct}%` }} />
+          </div>
+        </div>
       )}
 
-      <div className="space-y-2">
-        {AUTOBIOGRAPHY_STIMULI.map((s) => {
-          const done = completed.includes(s.id);
+      {prompts.length === 0 && (
+        <div className="card mb-6 border-dashed text-center">
+          <p className={`text-sm text-heritage-muted ${locale === 'hi' ? 'font-hindi' : ''}`}>
+            {t({
+              en: PROMPT_TEMPLATES.autobiography.descriptionEn,
+              hi: PROMPT_TEMPLATES.autobiography.descriptionHi,
+            })}
+          </p>
+          {bookId && userId && (
+            <button type="button" className="btn-primary mt-4" disabled={importing} onClick={handleImportAutobiography}>
+              {importing ? t({ en: 'Adding…', hi: 'जोड़ रहे…' }) : t({ en: 'Add life story set', hi: 'जीवन कथा सेट जोड़ें' })}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {prompts.map((s, index) => {
+          const done = completedIds.includes(s.id);
           const isNext = next?.id === s.id;
+          const num = String(index + 1).padStart(2, '0');
 
           if (done) {
             return (
-              <div key={s.id} className="card flex items-center gap-3 opacity-60">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 text-sm font-bold text-green-700">
+              <div key={s.id} className="flex gap-4 opacity-50">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-heritage-ink text-sm text-white">
                   ✓
-                </span>
+                </div>
                 <div className="min-w-0 flex-1">
-                  <BilingualLine en={s.titleEn} hi={s.titleHi} enClass="font-medium text-slate-800" hiClass="text-sm text-slate-500" />
-                  <BilingualLine en={s.category} hi={s.categoryHi} enClass="text-xs text-slate-500" hiClass="text-xs text-slate-400" />
-                  <p className="mt-1 text-xs text-green-600">Completed / पूर्ण</p>
+                  <p className={`font-serif text-base line-through text-heritage-muted ${locale === 'hi' ? 'font-hindi' : ''}`}>
+                    {promptText(s, locale)}
+                  </p>
                 </div>
               </div>
             );
           }
 
           return (
-            <button
+            <div
               key={s.id}
-              type="button"
-              className={`card flex w-full items-center gap-3 text-left active:scale-[0.99] transition ${
-                isNext ? 'ring-2 ring-accent-300' : ''
+              role="button"
+              tabIndex={0}
+              className={`flex w-full cursor-pointer gap-4 rounded-xl text-left transition hover:bg-heritage-cream/60 ${
+                isNext ? '' : 'opacity-90'
               }`}
-              onClick={() => startStimulus(s)}
+              onClick={() => void startPrompt(s)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void startPrompt(s);
+                }
+              }}
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-600">
-                {s.order}
-              </span>
-              <div className="min-w-0 flex-1">
-                <BilingualLine en={s.titleEn} hi={s.titleHi} enClass="font-medium text-slate-800" hiClass="text-sm text-slate-500" />
-                <BilingualLine en={s.category} hi={s.categoryHi} enClass="text-xs text-slate-500" hiClass="text-xs text-slate-400" />
-                <p className="mt-1 line-clamp-2 text-xs text-slate-600">{s.promptEn}</p>
-                <p className="font-hindi line-clamp-2 text-xs text-slate-500">{s.promptHi}</p>
+              <div
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                  isNext ? 'bg-brand-600 text-white' : 'border border-heritage-line text-heritage-muted'
+                }`}
+              >
+                {num}
               </div>
-              <span className="shrink-0 text-sm font-semibold text-brand-600">
-                Start<br />
-                <span className="font-hindi text-xs font-medium">शुरू</span>
-              </span>
-            </button>
+              <div className="min-w-0 flex-1">
+                <p className={`font-serif text-base leading-snug text-heritage-ink ${locale === 'hi' ? 'font-hindi' : ''}`}>
+                  {promptText(s, locale)}
+                </p>
+                {s.category && (
+                  <p className="mt-1 text-xs text-heritage-muted">{promptCategory(s, locale)}</p>
+                )}
+              </div>
+              {isOwner && s.source === 'user' && (
+                <div className="flex shrink-0 items-start gap-1 pt-0.5">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-base text-slate-500 hover:bg-slate-100"
+                    aria-label={t({ en: 'Edit prompt', hi: 'प्रश्न संपादित करें' })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditPrompt(s);
+                    }}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-base text-red-500 hover:bg-red-50"
+                    aria-label={t({ en: 'Delete prompt', hi: 'प्रश्न हटाएं' })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDelete(s);
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
 
-      <Link to="/add-stimulus" className="btn-secondary mt-6 block w-full text-center">
-        + Add Your Own (Text or Photo)
-        <span className="font-hindi block text-sm font-normal">अपना खुद का जोड़ें (टेक्स्ट या फोटो)</span>
-      </Link>
+      {bookId && userId && (
+        <button
+          type="button"
+          className="btn-secondary mt-8 w-full border-dashed"
+          onClick={() => setShowAdd(true)}
+        >
+          {t({ en: '+ Add custom prompt', hi: '+ अपना प्रश्न जोड़ें' })}
+        </button>
+      )}
+
+      {bookId && userId && (
+        <AddBookPromptModal
+          open={showAdd || editPrompt !== null}
+          onClose={() => {
+            setShowAdd(false);
+            setEditPrompt(null);
+          }}
+          bookId={bookId}
+          userId={userId}
+          prompt={editPrompt}
+        />
+      )}
     </div>
   );
 }

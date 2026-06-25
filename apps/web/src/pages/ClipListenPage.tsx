@@ -3,10 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ClipPlayButton } from '@/components/ClipPlayButton';
 import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
 import { getClipForListen } from '@/services/books';
 import type { AudioClip, Book } from '@/types';
 
 export function ClipListenPage() {
+  const t = usePickText();
   const { bookSlug, clipId } = useParams<{ bookSlug: string; clipId: string }>();
   const { user } = useAuth();
   const [book, setBook] = useState<Book | null>(null);
@@ -20,20 +22,20 @@ export function ClipListenPage() {
     getClipForListen(bookSlug, clipId)
       .then((data) => {
         if (!data) {
-          setError('Audio not found. / ऑडियो नहीं मिला।');
+          setError(t({ en: 'Audio not found.', hi: 'ऑडियो नहीं मिला।' }));
           return;
         }
         if (!data.book.isPublished && user?.uid !== data.book.userId) {
-          setError('This book is not published yet. / यह पुस्तक अभी प्रकाशित नहीं है।');
+          setError(t({ en: 'This book is not published yet.', hi: 'यह पुस्तक अभी प्रकाशित नहीं है।' }));
           return;
         }
         setBook(data.book);
         setClip(data.clip);
         setStoryTitle(data.storyTitle);
       })
-      .catch(() => setError('Failed to load audio. / ऑडियो लोड करने में विफल।'))
+      .catch(() => setError(t({ en: 'Failed to load audio.', hi: 'ऑडियो लोड करने में विफल।' })))
       .finally(() => setLoading(false));
-  }, [bookSlug, clipId, user?.uid]);
+  }, [bookSlug, clipId, user?.uid, t]);
 
   if (loading) {
     return (
@@ -75,7 +77,7 @@ export function ClipListenPage() {
           <p className="mt-6 text-left font-serif text-sm leading-relaxed text-amber-950/80">{clip.transcript.text}</p>
         )}
         <Link to={`/read/${bookSlug}`} className="mt-8 inline-block text-sm font-semibold text-brand-600">
-          ← Full album / पूरी एल्बम
+          ← {t({ en: 'Full album', hi: 'पूरी एल्बम' })}
         </Link>
       </div>
     </div>

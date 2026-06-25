@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { BilingualLine } from '@/components/BilingualText';
+import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
 import { CompactClipRecorder, PromptClipList } from '@/components/PromptClipRecorder';
 import { normalizePromptEntry } from '@/lib/imagePrompts';
 import { clipsForPrompt } from '@/lib/storyBlocks';
@@ -9,7 +9,7 @@ import {
   updateImagePromptEntry,
   deletePromptClip,
 } from '@/services/storySessions';
-import { deleteBlockClip, uploadBlockPromptClip } from '@/services/storyBlocks';
+import { deleteBlockClip, reorderBlockPromptClips, updateClipLabel, uploadBlockPromptClip } from '@/services/storyBlocks';
 
 function clipsForLegacyPrompt(
   allClips: AudioClip[],
@@ -82,6 +82,21 @@ export function ImagePromptField({
     }
   };
 
+  const movePromptClip = async (clipId: string, direction: 'up' | 'down') => {
+    if (!imageBlock) return;
+    const entry = normalizePromptEntry(normalized);
+    const order = [...(entry.clipOrder ?? [])].filter((id) => {
+      const clip = allClips.find((c) => c.id === id);
+      return clip && clip.errorMessage !== 'removed';
+    });
+    const idx = order.indexOf(clipId);
+    if (idx < 0) return;
+    const swap = direction === 'up' ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= order.length) return;
+    [order[idx], order[swap]] = [order[swap], order[idx]];
+    await reorderBlockPromptClips(sessionId, imageBlock.id, promptKey, order);
+  };
+
   const handleDraftBlur = async () => {
     await updateImagePromptEntry(sessionId, promptKey, { draftText: normalized.draftText });
   };
@@ -113,7 +128,34 @@ export function ImagePromptField({
           onChange={(e) => onEntryChange({ draftText: e.target.value })}
           onBlur={handleDraftBlur}
         />
-        <PromptClipList clips={promptClips} onDelete={handleDeleteClip} />
+        {imageBlock ? (
+          <PromptClipList
+            clips={allClips}
+            block={imageBlock}
+            promptKey={promptKey}
+            onMoveUp={(clipId) => void movePromptClip(clipId, 'up')}
+            onMoveDown={(clipId) => void movePromptClip(clipId, 'down')}
+            onDelete={handleDeleteClip}
+            onLabelChange={(clipId, label) => void updateClipLabel(clipId, label)}
+          />
+        ) : (
+          <PromptClipList
+            clips={allClips}
+            block={{
+              id: 'legacy',
+              type: 'image',
+              title: '',
+              imageUrl: '',
+              imageStoragePath: '',
+              prompts: { [promptKey]: normalized },
+            }}
+            promptKey={promptKey}
+            onMoveUp={() => undefined}
+            onMoveDown={() => undefined}
+            onDelete={handleDeleteClip}
+            onLabelChange={(clipId, label) => void updateClipLabel(clipId, label)}
+          />
+        )}
         <div className="mt-2 flex flex-wrap items-start gap-2">
           <CompactClipRecorder autoSave hasExistingClip={promptClips.length > 0} onClipReady={handleClipReady} />
         </div>
@@ -132,7 +174,7 @@ export function ImagePromptField({
             className="shrink-0 text-xs font-semibold text-brand-600"
             onClick={copyDraftToFinal}
           >
-            Copy draft → / ड्राफ्ट कॉपी →
+            <BilingualBtn en="Copy draft →" hi="ड्राफ्ट कॉपी →" />
           </button>
         </div>
         <textarea

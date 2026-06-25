@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SectionHeading, BilingualBtn } from '@/components/BilingualText';
+import { SectionHeading, BilingualBtn, T } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
 import { ImagePromptField } from '@/components/ImagePromptField';
 import { IMAGE_PROMPT_QUESTIONS } from '@/data/imagePromptQuestions';
 import { mergeImagePromptAnswers, normalizePromptEntry } from '@/lib/imagePrompts';
@@ -99,6 +100,8 @@ export function ImageStimulusPromptsEditor({
     }
   };
 
+  const t = usePickText();
+
   if (!session || !displayStimulus) {
     return (
       <div className="flex min-h-[200px] items-center justify-center">
@@ -111,7 +114,7 @@ export function ImageStimulusPromptsEditor({
     <div className="space-y-4">
       {onBack && (
         <button type="button" className="text-sm text-brand-600" onClick={onBack}>
-          ← Back / वापस
+          ← {t({ en: 'Back', hi: 'वापस' })}
         </button>
       )}
 
@@ -150,8 +153,7 @@ export function ImageStimulusPromptsEditor({
       </button>
 
       <p className="text-center text-xs text-slate-400">
-        <span className="block">Recordings auto-save — listen above each prompt</span>
-        <span className="font-hindi block">रिकॉर्डिंग स्वचालित सहेजी जाती है — प्रत्येक प्रश्न के ऊपर सुनें</span>
+        <T en="Recordings auto-save — listen above each prompt" hi="रिकॉर्डिंग स्वचालित सहेजी जाती है — प्रत्येक प्रश्न के ऊपर सुनें" />
       </p>
     </div>
   );
@@ -163,7 +165,7 @@ function ImagePreview({ imageStimulus }: { imageStimulus: ImageStimulusData }) {
       <img
         src={imageStimulus.imageUrl}
         alt={imageStimulus.title || 'Photo'}
-        className="mb-2 max-h-[70vh] w-full rounded-xl object-contain"
+        className="mx-auto mb-2 max-h-40 w-full rounded-xl object-contain"
       />
       {imageStimulus.title?.trim() && (
         <p className="font-semibold text-slate-800">{imageStimulus.title}</p>

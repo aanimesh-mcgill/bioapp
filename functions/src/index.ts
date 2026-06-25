@@ -15,6 +15,17 @@ setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
 const db = getFirestore();
 
+function clipProcessingError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : 'Processing failed';
+  if (raw.includes('503') || raw.toLowerCase().includes('service unavailable')) {
+    return 'Transcription service unavailable — tap Retry transcription.';
+  }
+  if (raw.includes('502') || raw.includes('504') || raw.toLowerCase().includes('timeout')) {
+    return 'Transcription timed out — tap Retry transcription.';
+  }
+  return raw.length > 240 ? `${raw.slice(0, 240)}…` : raw;
+}
+
 interface SessionDoc {
   userId: string;
   bookId?: string;
@@ -46,6 +57,7 @@ interface SessionDoc {
     }
   >;
   perspective?: string;
+  isContributorStory?: boolean;
 }
 
 interface ClipDoc {
@@ -75,6 +87,7 @@ async function appendPromptTranscript(
   transcriptText: string,
   blockId?: string,
 ): Promise<void> {
+  if (!transcriptText.trim()) return;
   const sessionRef = db.collection('storySessions').doc(sessionId);
   const snap = await sessionRef.get();
   const data = snap.data() as SessionDoc | undefined;
@@ -287,7 +300,7 @@ async function maybeGenerateStory(sessionId: string): Promise<void> {
     });
 
     await sessionRef.update({
-      status: 'pending_approval',
+      status: session.isContributorStory ? 'pending_approval' : 'approved',
       combinedTranscript: {
         text: combinedText,
         language: primaryLang,
@@ -366,7 +379,7 @@ async function processClipUpload(
     console.error('Clip processing failed:', err);
     await clipRef.update({
       status: 'error',
-      errorMessage: err instanceof Error ? err.message : 'Processing failed',
+      errorMessage: clipProcessingError(err),
     });
   }
 }

@@ -2,6 +2,7 @@ import {
   addDoc,
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -13,11 +14,13 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type DocumentData,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
+import { ensureDefaultBookPrompts } from '@/services/bookPrompts';
 import type {
   CollabBook,
   BookAudioClip,
@@ -29,6 +32,7 @@ import type {
 } from '@/types';
 
 const COLLAB_BOOKS_COLLECTION = 'collabBooks';
+export const DEFAULT_BOOK_TITLE = 'Autobiography';
 
 function randomToken(length = 22) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -123,7 +127,22 @@ export async function ensureUserHasBook(userId: string): Promise<string> {
   const ownerBooks = await getDocs(
     query(collection(db, COLLAB_BOOKS_COLLECTION), where('ownerId', '==', userId)),
   );
-  if (!ownerBooks.empty) return ownerBooks.docs[0].id;
+  if (!ownerBooks.empty) {
+    const autobiography = ownerBooks.docs.find(
+      (d) =>
+        String(d.data().title ?? '')
+          .trim()
+          .toLowerCase() === DEFAULT_BOOK_TITLE.toLowerCase(),
+    );
+    if (autobiography) {
+      await ensureDefaultBookPrompts(
+        autobiography.id,
+        DEFAULT_BOOK_TITLE,
+        userId,
+      );
+    }
+    return ownerBooks.docs[0].id;
+  }
 
   const invitedBooks = await getDocs(
     query(
@@ -133,7 +152,9 @@ export async function ensureUserHasBook(userId: string): Promise<string> {
   );
   if (!invitedBooks.empty) return invitedBooks.docs[0].id;
 
-  return createBook(userId, 'My First Book', 'Start collecting your life stories.');
+  const bookId = await createBook(userId, DEFAULT_BOOK_TITLE, 'Your life stories.');
+  await ensureDefaultBookPrompts(bookId, DEFAULT_BOOK_TITLE, userId);
+  return bookId;
 }
 
 export function subscribeToBooks(userId: string, callback: (books: CollabBook[]) => void) {
@@ -162,14 +183,27 @@ export function subscribeToBooks(userId: string, callback: (books: CollabBook[])
     );
   };
 
-  const unsubOwner = onSnapshot(ownerQ, (snap) => {
-    ownerBooks = snap.docs.map(mapBook);
-    publish();
-  });
-  const unsubCollaborator = onSnapshot(collaboratorQ, (snap) => {
-    collaboratorBooks = snap.docs.map(mapBook);
-    publish();
-  });
+  const onSnapshotError = (error: Error) => {
+    console.error('collabBooks subscription failed:', error);
+    callback([]);
+  };
+
+  const unsubOwner = onSnapshot(
+    ownerQ,
+    (snap) => {
+      ownerBooks = snap.docs.map(mapBook);
+      publish();
+    },
+    onSnapshotError,
+  );
+  const unsubCollaborator = onSnapshot(
+    collaboratorQ,
+    (snap) => {
+      collaboratorBooks = snap.docs.map(mapBook);
+      publish();
+    },
+    onSnapshotError,
+  );
 
   return () => {
     unsubOwner();
@@ -191,6 +225,92 @@ export async function getBook(bookId: string): Promise<CollabBook | null> {
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
   };
+}
+
+
+export async function updateBookMetadata(
+  bookId: string,
+  requesterUid: string,
+  patch: { title?: string; description?: string },
+) {
+  const book = await getBook(bookId);
+  if (!book) throw new Error('Book not found');
+  if (book.ownerId !== requesterUid) {
+    throw new Error('Only the book owner can edit book details.');
+  }
+  const title = patch.title?.trim();
+  const description = patch.description?.trim();
+  await updateDoc(doc(db, COLLAB_BOOKS_COLLECTION, bookId), {
+    ...(title ? { title } : {}),
+    ...(description !== undefined ? { description } : {}),
+    updatedAt: serverTimestamp(),
+  });
+
+}
+
+async function deleteSubcollectionDocs(
+  bookId: string,
+  subcollection: string,
+): Promise<void> {
+  const snap = await getDocs(collection(db, COLLAB_BOOKS_COLLECTION, bookId, subcollection));
+  if (snap.empty) return;
+
+  let batch = writeBatch(db);
+  let count = 0;
+  for (const d of snap.docs) {
+    batch.delete(d.ref);
+    count += 1;
+    if (count >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      count = 0;
+    }
+  }
+  if (count > 0) await batch.commit();
+}
+
+export async function deleteBook(bookId: string, requesterUid: string): Promise<void> {
+  const book = await getBook(bookId);
+  if (!book) throw new Error('Book not found');
+  if (book.ownerId !== requesterUid) {
+    throw new Error('Only the book owner can delete this book.');
+  }
+
+  await deleteSubcollectionDocs(bookId, 'prompts');
+  await deleteSubcollectionDocs(bookId, 'promptProgress');
+
+  const albumSnap = await getDocs(
+    query(collection(db, 'books'), where('collabBookId', '==', bookId)),
+  );
+  for (const albumDoc of albumSnap.docs) {
+    await deleteDoc(albumDoc.ref);
+  }
+
+  await deleteDoc(doc(db, COLLAB_BOOKS_COLLECTION, bookId));
+}
+
+export function subscribeToBookOwnerInvitations(
+  bookId: string,
+  callback: (invitations: BookInvitation[]) => void,
+) {
+  const q = query(
+    collection(db, 'bookInvitations'),
+    where('bookId', '==', bookId),
+    orderBy('createdAt', 'desc'),
+  );
+  return onSnapshot(
+    q,
+    (snap) =>
+      callback(
+        snap.docs
+          .map(mapInvitation)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      ),
+    (error) => {
+      console.error('bookInvitations subscription failed:', error);
+      callback([]);
+    },
+  );
 }
 
 export async function createBookInvitation(params: {
@@ -430,42 +550,59 @@ export async function refreshPublicBookSnapshot(bookId: string, requesterUid: st
     throw new Error('Only the book owner can create a public share link.');
   }
 
+  const { buildPublicBrowseSnapshot } = await import('@/lib/publicBrowseSnapshot');
+  const fromAlbum = await buildPublicBrowseSnapshot(
+    { id: book.id, title: book.title, description: book.description },
+    book.ownerId,
+    book.ownerId,
+  );
+
   const storiesSnap = await getDocs(
-    query(collection(db, 'bookStories'), where('bookId', '==', bookId), orderBy('createdAt', 'asc')),
+    query(collection(db, 'bookStories'), where('bookId', '==', bookId)),
   );
   const clipsSnap = await getDocs(
-    query(collection(db, 'bookAudioClips'), where('bookId', '==', bookId), orderBy('createdAt', 'asc')),
+    query(collection(db, 'bookAudioClips'), where('bookId', '==', bookId)),
   );
+
+  const existingStoryIds = new Set(fromAlbum.stories.map((s) => s.id));
+  const legacyStories = storiesSnap.docs
+    .map(mapStory)
+    .filter((story) => !existingStoryIds.has(story.id))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .map((story) => ({
+      id: story.id,
+      title: story.title,
+      content: story.content,
+      imageUrl: story.imageUrl,
+      authorName: story.authorName,
+      createdAt: story.createdAt.toISOString(),
+    }));
+
+  const existingClipIds = new Set(fromAlbum.audioClips.map((c) => c.id));
+  const legacyClips = clipsSnap.docs
+    .map(mapAudioClip)
+    .filter((clip) => !existingClipIds.has(clip.id))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .map((clip) => ({
+      id: clip.id,
+      promptType: clip.promptType,
+      promptText: clip.promptText,
+      imageUrl: clip.imageUrl,
+      audioUrl: clip.audioUrl,
+      createdByName: clip.createdByName,
+      createdAt: clip.createdAt.toISOString(),
+    }));
 
   const shareToken = book.activeShareToken || randomToken(18);
   const payload: Omit<PublicBookSnapshot, 'id'> = {
     bookId,
+    albumBookId: fromAlbum.albumBookId,
     bookTitle: book.title,
-    description: book.description,
+    description: book.description ?? fromAlbum.description,
     shareToken,
-    stories: storiesSnap.docs.map((docSnap) => {
-      const story = mapStory(docSnap);
-      return {
-        id: story.id,
-        title: story.title,
-        content: story.content,
-        imageUrl: story.imageUrl,
-        authorName: story.authorName,
-        createdAt: story.createdAt.toISOString(),
-      };
-    }),
-    audioClips: clipsSnap.docs.map((docSnap) => {
-      const clip = mapAudioClip(docSnap);
-      return {
-        id: clip.id,
-        promptType: clip.promptType,
-        promptText: clip.promptText,
-        imageUrl: clip.imageUrl,
-        audioUrl: clip.audioUrl,
-        createdByName: clip.createdByName,
-        createdAt: clip.createdAt.toISOString(),
-      };
-    }),
+    stories: [...fromAlbum.stories, ...legacyStories],
+    audioClips: [...fromAlbum.audioClips, ...legacyClips],
+    chapters: fromAlbum.chapters,
     updatedAt: new Date(),
   };
 

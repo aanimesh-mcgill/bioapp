@@ -14,11 +14,13 @@ import { PHOTO_STORY_PLACEHOLDER } from '@/lib/photoStory';
 import { ImageMetadataForm, TextStimulusForm } from '@/components/StimulusForms';
 
 import { PageHeading, BilingualBtn } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
 
 
 
 export function ContributeRecordPage() {
 
+  const t = usePickText();
   const { invite } = useContributorInvite();
 
   const { user } = useAuth();
@@ -71,7 +73,7 @@ export function ContributeRecordPage() {
 
       <Link to={`/contribute/${invite.inviteSlug}/hub`} className="mb-4 inline-block text-sm text-brand-600">
 
-        ← Back / वापस
+        ← {t({ en: 'Back', hi: 'वापस' })}
 
       </Link>
 
@@ -79,7 +81,10 @@ export function ContributeRecordPage() {
 
       <p className="mb-4 text-sm text-slate-500">
 
-        As {invite.contributorName} ({invite.relationship}) / {invite.contributorName} के रूप में ({invite.relationship})
+        {t({
+          en: `As ${invite.contributorName} (${invite.relationship})`,
+          hi: `${invite.contributorName} के रूप में (${invite.relationship})`,
+        })}
 
       </p>
 
@@ -87,7 +92,7 @@ export function ContributeRecordPage() {
 
         className="input-field mb-4"
 
-        placeholder="What is this memory about? / यह याद किस बारे में है?"
+        placeholder={t({ en: 'What is this memory about?', hi: 'यह याद किस बारे में है?' })}
 
         value={title}
 
@@ -119,6 +124,7 @@ export function ContributeRecordPage() {
 
 export function ContributeAddPhotoPage() {
 
+  const t = usePickText();
   const { invite } = useContributorInvite();
 
   const { user } = useAuth();
@@ -177,7 +183,7 @@ export function ContributeAddPhotoPage() {
 
       <Link to={`/contribute/${invite.inviteSlug}/hub`} className="mb-4 inline-block text-sm text-brand-600">
 
-        ← Back / वापस
+        ← {t({ en: 'Back', hi: 'वापस' })}
 
       </Link>
 
@@ -195,6 +201,7 @@ export function ContributeAddPhotoPage() {
 
 export function ContributeAddTextPage() {
 
+  const t = usePickText();
   const { invite } = useContributorInvite();
 
   const { user } = useAuth();
@@ -245,7 +252,7 @@ export function ContributeAddTextPage() {
 
       <Link to={`/contribute/${invite.inviteSlug}/hub`} className="mb-4 inline-block text-sm text-brand-600">
 
-        ← Back / वापस
+        ← {t({ en: 'Back', hi: 'वापस' })}
 
       </Link>
 

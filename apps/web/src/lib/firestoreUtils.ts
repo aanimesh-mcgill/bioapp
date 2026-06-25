@@ -13,3 +13,24 @@ export function stripUndefined<T>(value: T): T {
   }
   return result as T;
 }
+
+export function toDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (
+    value &&
+    typeof value === 'object' &&
+    'toDate' in value &&
+    typeof (value as { toDate: () => Date }).toDate === 'function'
+  ) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+export function toIsoString(value: unknown): string {
+  return toDate(value).toISOString();
+}

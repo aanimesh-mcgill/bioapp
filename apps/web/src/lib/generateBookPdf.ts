@@ -1,14 +1,17 @@
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { AlbumPdfPage, PDF_PAGE_H, PDF_PAGE_W } from '@/components/AlbumPdfPage';
 import type { AlbumSpread } from '@/lib/albumPages';
+import { filterBlankAlbumPages } from '@/lib/albumPages';
+import { resolveImageDataUrls } from '@/lib/imageDataUrl';
 import { qrCodeDataUrl } from '@/lib/qrCode';
-import { clipListenUrl } from '@/lib/slug';
+import { spreadPublicUrl } from '@/lib/slug';
 import type { AudioClip, Book } from '@/types';
 
-const MARGIN = 18;
-const PAGE_W = 210;
-const PAGE_H = 297;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-const QR_SIZE = 22;
+const PAGE_W_MM = 210;
+const PAGE_H_MM = 297;
 
 function clipsForSpread(page: AlbumSpread, clipsByStory: Record<string, AudioClip[]>): AudioClip[] {
   if (!page.storyId) return [];
@@ -20,38 +23,110 @@ function clipsForSpread(page: AlbumSpread, clipsByStory: Record<string, AudioCli
     .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 }
 
-async function fetchImageDataUrl(url: string): Promise<string | null> {
+function renderPageToDom(
+  container: HTMLElement,
+  props: {
+    book: Book;
+    page: AlbumSpread;
+    pages: AlbumSpread[];
+    clips: AudioClip[];
+    qrDataUrl?: string | null;
+  },
+): Promise<ReturnType<typeof createRoot>> {
+  return new Promise((resolve) => {
+    const root = createRoot(container);
+    root.render(
+      createElement(AlbumPdfPage, {
+        ...props,
+        onReady: () => resolve(root),
+      }),
+    );
+  });
+}
+
+function pageWithResolvedImage(page: AlbumSpread, resolved: Map<string, string>): AlbumSpread {
+  if (page.kind !== 'spread' || !page.imageUrl) return page;
+  const dataUrl = resolved.get(page.imageUrl);
+  return dataUrl ? { ...page, imageUrl: dataUrl } : page;
+}
+
+async function capturePage(container: HTMLElement): Promise<string> {
+  await document.fonts.ready;
+  const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#f4ebe0',
+    logging: false,
+    width: PDF_PAGE_W,
+    height: PDF_PAGE_H,
+    windowWidth: PDF_PAGE_W,
+    windowHeight: PDF_PAGE_H,
+  });
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+async function renderBookPdfDoc(
+  book: Book,
+  pages: AlbumSpread[],
+  clipsByStory: Record<string, AudioClip[]>,
+): Promise<jsPDF> {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  const printablePages = filterBlankAlbumPages(pages, clipsByStory);
+  const mount = document.createElement('div');
+  mount.style.position = 'fixed';
+  mount.style.left = '-10000px';
+  mount.style.top = '0';
+  mount.style.width = `${PDF_PAGE_W}px`;
+  mount.style.height = `${PDF_PAGE_H}px`;
+  mount.style.overflow = 'hidden';
+  document.body.appendChild(mount);
+
+  const imageUrls = printablePages
+    .filter((p): p is AlbumSpread & { imageUrl: string } => p.kind === 'spread' && !!p.imageUrl)
+    .map((p) => p.imageUrl);
+  const resolvedImages = await resolveImageDataUrls(imageUrls);
+
   try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
+    let pageStarted = false;
+
+    for (let pageIndex = 0; pageIndex < printablePages.length; pageIndex++) {
+      const page = pageWithResolvedImage(printablePages[pageIndex], resolvedImages);
+      const clips = page.kind === 'spread' ? clipsForSpread(page, clipsByStory) : [];
+      let qrDataUrl: string | null = null;
+
+      if (clips.length > 0) {
+        const url = spreadPublicUrl(
+          book.publicSlug,
+          { storyId: page.storyId, blockId: page.blockId, pageIndex },
+          { play: true },
+        );
+        qrDataUrl = await qrCodeDataUrl(url, 200);
+      }
+
+      mount.innerHTML = '';
+      const root = await renderPageToDom(mount, { book, page, pages: printablePages, clips, qrDataUrl });
+      const imageData = await capturePage(mount);
+      root.unmount();
+
+      if (pageStarted) doc.addPage();
+      pageStarted = true;
+      doc.addImage(imageData, 'JPEG', 0, 0, PAGE_W_MM, PAGE_H_MM);
+    }
+  } finally {
+    mount.remove();
   }
+
+  return doc;
 }
 
-function ensureSpace(doc: jsPDF, y: number, needed: number): number {
-  if (y + needed > PAGE_H - MARGIN) {
-    doc.addPage();
-    return MARGIN;
-  }
-  return y;
-}
-
-function addWrappedText(doc: jsPDF, text: string, x: number, y: number, maxWidth: number, lineHeight = 5): number {
-  const lines = doc.splitTextToSize(text, maxWidth) as string[];
-  for (const line of lines) {
-    y = ensureSpace(doc, y, lineHeight);
-    doc.text(line, x, y);
-    y += lineHeight;
-  }
-  return y;
+export async function buildBookPdfBlob(
+  book: Book,
+  pages: AlbumSpread[],
+  clipsByStory: Record<string, AudioClip[]>,
+): Promise<Blob> {
+  const doc = await renderBookPdfDoc(book, pages, clipsByStory);
+  return doc.output('blob');
 }
 
 export async function generateBookPdf(
@@ -59,153 +134,19 @@ export async function generateBookPdf(
   pages: AlbumSpread[],
   clipsByStory: Record<string, AudioClip[]>,
 ): Promise<void> {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const tocSpreads = pages.filter((p) => p.kind === 'spread');
-  let pageStarted = false;
-
-  const newSheet = () => {
-    if (pageStarted) doc.addPage();
-    pageStarted = true;
-  };
-
-  for (const page of pages) {
-    if (page.kind === 'cover') {
-      newSheet();
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text('AATMA KATHA', PAGE_W / 2, 60, { align: 'center' });
-      doc.setFontSize(28);
-      doc.setFont('helvetica', 'bold');
-      const titleLines = doc.splitTextToSize(book.title, CONTENT_W) as string[];
-      doc.text(titleLines, PAGE_W / 2, 90, { align: 'center' });
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'italic');
-      doc.text(`by ${book.authorName}`, PAGE_W / 2, 110, { align: 'center' });
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('A life in photos & voices', PAGE_W / 2, 125, { align: 'center' });
-      continue;
-    }
-
-    if (page.kind === 'toc') {
-      newSheet();
-      let y = MARGIN;
-      doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Contents / विषय सूची', MARGIN, y);
-      y += 12;
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      let lastChapter = '';
-      for (const spread of tocSpreads) {
-        if (spread.chapterTitle && spread.chapterTitle !== lastChapter) {
-          lastChapter = spread.chapterTitle;
-          y = ensureSpace(doc, y, 8);
-          doc.setFont('helvetica', 'bold');
-          y = addWrappedText(doc, spread.chapterTitle, MARGIN, y, CONTENT_W, 6);
-          doc.setFont('helvetica', 'normal');
-        }
-        const label = spread.imageTitle ?? spread.bodyText?.slice(0, 60) ?? spread.storyTitle ?? 'Story';
-        y = addWrappedText(doc, `• ${label}`, MARGIN + 4, y, CONTENT_W - 4, 5);
-      }
-      continue;
-    }
-
-    if (page.kind === 'chapter') {
-      newSheet();
-      let y = MARGIN + 40;
-      doc.setFontSize(10);
-      doc.text('CHAPTER / अध्याय', PAGE_W / 2, y, { align: 'center' });
-      y += 15;
-      doc.setFontSize(22);
-      doc.setFont('helvetica', 'bold');
-      doc.text(page.chapterTitle ?? '', PAGE_W / 2, y, { align: 'center' });
-      continue;
-    }
-
-    if (page.kind === 'spread') {
-      newSheet();
-      let y = MARGIN;
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      if (page.chapterTitle) {
-        y = addWrappedText(doc, page.chapterTitle.toUpperCase(), MARGIN, y, CONTENT_W, 5);
-        y += 2;
-      }
-
-      if (page.blockType === 'image' && page.imageUrl) {
-        const imgData = await fetchImageDataUrl(page.imageUrl);
-        if (imgData) {
-          const imgW = Math.min(CONTENT_W, 120);
-          const imgH = imgW * 1.2;
-          y = ensureSpace(doc, y, imgH + 10);
-          const imgX = MARGIN + (CONTENT_W - imgW) / 2;
-          doc.addImage(imgData, 'JPEG', imgX, y, imgW, imgH);
-          y += imgH + 6;
-        }
-        if (page.imageTitle) {
-          doc.setFont('helvetica', 'bold');
-          y = addWrappedText(doc, page.imageTitle, MARGIN, y, CONTENT_W, 5);
-          doc.setFont('helvetica', 'normal');
-        }
-        if (page.dateLabel) {
-          y = addWrappedText(doc, page.dateLabel, MARGIN, y, CONTENT_W, 5);
-        }
-        y += 4;
-      }
-
-      if (page.blockType === 'text' && page.bodyText) {
-        doc.setFont('helvetica', 'italic');
-        y = addWrappedText(doc, page.bodyText.split('\n\n')[0]?.slice(0, 400) ?? '', MARGIN, y, CONTENT_W, 5);
-        doc.setFont('helvetica', 'normal');
-        y += 4;
-      }
-
-      if (page.bodyText) {
-        const body =
-          page.blockType === 'image'
-            ? page.bodyText
-            : page.bodyText.split('\n\n').slice(1).join('\n\n') || page.bodyText;
-        if (body.trim()) {
-          y = addWrappedText(doc, body, MARGIN, y, CONTENT_W, 5);
-          y += 4;
-        }
-      }
-
-      const clips = clipsForSpread(page, clipsByStory);
-      if (clips.length > 0) {
-        y = ensureSpace(doc, y, 12);
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Listen — scan QR / सुनें — QR स्कैन करें', MARGIN, y);
-        y += 8;
-        doc.setFont('helvetica', 'normal');
-
-        for (let i = 0; i < clips.length; i++) {
-          const clip = clips[i];
-          const row = Math.floor(i / 3);
-          const col = i % 3;
-          const qrX = MARGIN + col * (QR_SIZE + 28);
-          const qrY = y + row * (QR_SIZE + 14);
-          y = ensureSpace(doc, qrY, QR_SIZE + 12);
-
-          const url = clipListenUrl(book.publicSlug, clip.id);
-          try {
-            const qr = await qrCodeDataUrl(url, 88);
-            doc.addImage(qr, 'PNG', qrX, qrY, QR_SIZE, QR_SIZE);
-            doc.setFontSize(7);
-            doc.text(`Clip ${i + 1}`, qrX, qrY + QR_SIZE + 4);
-            doc.setFontSize(8);
-          } catch {
-            doc.text(`Clip ${i + 1}: ${url}`, qrX, qrY);
-          }
-        }
-        const rows = Math.ceil(clips.length / 3);
-        y += rows * (QR_SIZE + 14) + 4;
-      }
-    }
-  }
-
+  const doc = await renderBookPdfDoc(book, pages, clipsByStory);
   const safeTitle = book.title.replace(/[^\w\s-]/g, '').trim() || 'album';
   doc.save(`${safeTitle}-aatma-katha.pdf`);
+}
+
+export function downloadBookPdfBlob(book: Book, blob: Blob): void {
+  const safeTitle = book.title.replace(/[^\w\s-]/g, '').trim() || 'album';
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${safeTitle}-aatma-katha.pdf`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

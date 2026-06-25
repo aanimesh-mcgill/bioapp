@@ -1,4 +1,12 @@
-import type { Stimulus } from '@/types';
+import type { BookPrompt, Stimulus } from '@/types';
+import type { UiLocale } from '@/lib/locale';
+import { pickText } from '@/lib/locale';
+import { getNextInQueue } from '@/lib/turnQueue';
+
+export type PromptLike = Pick<
+  BookPrompt,
+  'id' | 'order' | 'titleEn' | 'titleHi' | 'promptEn' | 'promptHi' | 'category' | 'categoryHi'
+>;
 
 export const AUTOBIOGRAPHY_STIMULI: Stimulus[] = [
   {
@@ -143,14 +151,63 @@ export const AUTOBIOGRAPHY_STIMULI: Stimulus[] = [
   },
 ];
 
+export const PROMPT_TEMPLATES = {
+  autobiography: {
+    id: 'autobiography',
+    titleEn: 'Life Story Prompts',
+    titleHi: 'जीवन कथा प्रश्न',
+    descriptionEn: 'Classic autobiography questions — childhood, family, turning points, and legacy.',
+    descriptionHi: 'क्लासिक आत्मकथा प्रश्न — बचपन, परिवार, महत्वपूर्ण मोड़ और विरासत।',
+    prompts: AUTOBIOGRAPHY_STIMULI,
+  },
+} as const;
+
+export type PromptTemplateId = keyof typeof PROMPT_TEMPLATES;
+
+export function getNextPrompt(
+  prompts: PromptLike[],
+  completedIds: string[],
+  skippedIds: string[] = [],
+): PromptLike | null {
+  return getNextInQueue(
+    prompts,
+    completedIds,
+    skippedIds,
+    (a, b) => a.order - b.order,
+  );
+}
+
+/** @deprecated Use getNextPrompt with book prompts */
 export function getNextStimulus(completedIds: string[]): Stimulus | null {
-  return AUTOBIOGRAPHY_STIMULI.find((s) => !completedIds.includes(s.id)) ?? null;
+  return getNextPrompt(AUTOBIOGRAPHY_STIMULI, completedIds);
 }
 
 export function getStimulusById(id: string): Stimulus | undefined {
   return AUTOBIOGRAPHY_STIMULI.find((s) => s.id === id);
 }
 
-export function bilingualStimulusPrompt(stimulus: Stimulus): string {
+export function promptTitle(prompt: PromptLike, locale: UiLocale): string {
+  return pickText({ en: prompt.titleEn, hi: prompt.titleHi }, locale);
+}
+
+export function promptText(prompt: PromptLike, locale: UiLocale): string {
+  return pickText({ en: prompt.promptEn, hi: prompt.promptHi }, locale);
+}
+
+export function promptCategory(prompt: PromptLike, locale: UiLocale): string {
+  return pickText({ en: prompt.category, hi: prompt.categoryHi }, locale);
+}
+
+/** @deprecated Use promptTitle */
+export function stimulusTitle(stimulus: PromptLike, locale: UiLocale): string {
+  return promptTitle(stimulus, locale);
+}
+
+/** @deprecated Use promptText */
+export function stimulusPrompt(stimulus: PromptLike, locale: UiLocale): string {
+  return promptText(stimulus, locale);
+}
+
+export function bilingualStimulusPrompt(stimulus: PromptLike): string {
   return `${stimulus.promptEn}\n\n${stimulus.promptHi}`;
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
+import { BilingualBtn, BilingualLine, T } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
 import { ClipRecorder } from '@/components/ClipRecorder';
 
 export type StoryNameResult =
@@ -15,6 +16,7 @@ interface StoryNamePromptProps {
 }
 
 export function StoryNamePrompt({ open, busy, statusMessage, onCancel, onSubmit }: StoryNamePromptProps) {
+  const t = usePickText();
   const [mode, setMode] = useState<'type' | 'speak'>('type');
   const [name, setName] = useState('');
   const [recording, setRecording] = useState<{ blob: Blob; duration: number } | null>(null);
@@ -40,13 +42,13 @@ export function StoryNamePrompt({ open, busy, statusMessage, onCancel, onSubmit 
         aria-labelledby="story-name-title"
       >
         <h2 id="story-name-title" className="text-lg font-bold text-slate-900">
-          Name this story / कहानी का नाम
+          {t({ en: 'Name this story', hi: 'कहानी का नाम' })}
         </h2>
         <BilingualLine
           en="Give this memory a short name — type it or say it out loud."
           hi="इस याद को एक छोटा नाम दें — टाइप करें या बोलकर बताएं।"
           enClass="mt-1 text-sm text-slate-600"
-          hiClass="text-xs text-slate-500"
+          hiClass="mt-1 text-sm text-slate-600"
         />
 
         <div className="mt-4 flex gap-2">
@@ -58,7 +60,7 @@ export function StoryNamePrompt({ open, busy, statusMessage, onCancel, onSubmit 
             onClick={() => setMode('type')}
             disabled={busy}
           >
-            Type / टाइप
+            {t({ en: 'Type', hi: 'टाइप' })}
           </button>
           <button
             type="button"
@@ -68,14 +70,14 @@ export function StoryNamePrompt({ open, busy, statusMessage, onCancel, onSubmit 
             onClick={() => setMode('speak')}
             disabled={busy}
           >
-            Speak / बोलें
+            {t({ en: 'Speak', hi: 'बोलें' })}
           </button>
         </div>
 
         {mode === 'type' ? (
           <input
             className="input-field mt-4"
-            placeholder="e.g. Wedding day, 1985 / जैसे शादी का दिन"
+            placeholder={t({ en: 'e.g. Wedding day, 1985', hi: 'जैसे शादी का दिन' })}
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={busy}
@@ -91,7 +93,10 @@ export function StoryNamePrompt({ open, busy, statusMessage, onCancel, onSubmit 
             />
             {recording && (
               <p className="text-center text-xs text-green-700">
-                Recording captured — tap Save below. / रिकॉर्डिंग हो गई — नीचे सहेजें दबाएं।
+                <T
+                  en="Recording captured — tap Save below."
+                  hi="रिकॉर्डिंग हो गई — नीचे सहेजें दबाएं।"
+                />
               </p>
             )}
           </div>

@@ -9,11 +9,16 @@ import {
   orderBy,
   serverTimestamp,
   getDoc,
+  getDocs,
   arrayUnion,
   writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, storage, functions } from '@/lib/firebase';
+import { uploadFileAndGetUrl } from '@/lib/storageUpload';
+import { markPromptComplete } from '@/services/bookPrompts';
+import { nextClipNumber } from '@/services/storyBlocks';
 import type {
   StorySession,
   AudioClip,
@@ -25,10 +30,11 @@ import type {
   ImagePromptAnswers,
   ImagePromptEntry,
   StoryPerspective,
+  Chapter,
 } from '@/types';
 import { mergePromptAnswers, composeImageStoryReaderText } from '@/lib/imagePrompts';
 import { resolveStoryBlocks } from '@/lib/storyBlocks';
-import { stripUndefined } from '@/lib/firestoreUtils';
+import { stripUndefined, toDate } from '@/lib/firestoreUtils';
 import { updateImageBlockMeta } from '@/services/storyBlocks';
 
 function mapSession(id: string, data: Record<string, unknown>): StorySession {
@@ -36,6 +42,7 @@ function mapSession(id: string, data: Record<string, unknown>): StorySession {
     id,
     userId: data.userId as string,
     bookId: data.bookId as string | undefined,
+    collabBookId: data.collabBookId as string | undefined,
     bookOwnerId: data.bookOwnerId as string | undefined,
     chapterId: data.chapterId as string | undefined,
     chapterOrder: data.chapterOrder as number | undefined,
@@ -65,9 +72,14 @@ function mapSession(id: string, data: Record<string, unknown>): StorySession {
     contributorInviteId: data.contributorInviteId as string | undefined,
     contributorName: data.contributorName as string | undefined,
     contributorRelationship: data.contributorRelationship as string | undefined,
-    createdAt: (data.createdAt as { toDate: () => Date })?.toDate?.() ?? new Date(),
-    updatedAt: (data.updatedAt as { toDate: () => Date })?.toDate?.() ?? new Date(),
+    contributorSubmitted: data.contributorSubmitted as boolean | undefined,
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
   };
+}
+
+export function mapStorySession(id: string, data: Record<string, unknown>): StorySession {
+  return mapSession(id, data);
 }
 
 function mapClip(id: string, data: Record<string, unknown>): AudioClip {
@@ -79,14 +91,19 @@ function mapClip(id: string, data: Record<string, unknown>): AudioClip {
     promptKey: data.promptKey as string | undefined,
     blockId: data.blockId as string | undefined,
     label: data.label as string | undefined,
+    clipNumber: data.clipNumber as number | undefined,
     storagePath: data.storagePath as string,
     audioUrl: data.audioUrl as string | undefined,
     durationSeconds: data.durationSeconds as number | undefined,
     status: data.status as AudioClip['status'],
     transcript: data.transcript as AudioClip['transcript'],
     errorMessage: data.errorMessage as string | undefined,
-    createdAt: (data.createdAt as { toDate: () => Date })?.toDate?.() ?? new Date(),
+    createdAt: toDate(data.createdAt),
   };
+}
+
+export function mapAudioClip(id: string, data: Record<string, unknown>): AudioClip {
+  return mapClip(id, data);
 }
 
 export interface CreateSessionOpts {
@@ -101,6 +118,7 @@ export interface CreateSessionOpts {
   hindiOutputMode: HindiOutputMode;
   perspective: StoryPerspective;
   bookId?: string;
+  collabBookId?: string;
   bookOwnerId?: string;
   contributorInviteId?: string;
   contributorName?: string;
@@ -125,6 +143,7 @@ export async function createStorySession(opts: CreateSessionOpts): Promise<strin
       textStimulus: opts.textStimulus ?? null,
       imageStimulus: opts.imageStimulus ?? null,
       bookId: opts.bookId ?? null,
+      collabBookId: opts.collabBookId ?? opts.bookId ?? null,
       bookOwnerId: opts.bookOwnerId ?? null,
       contributorInviteId: opts.contributorInviteId ?? null,
       contributorName: opts.contributorName ?? null,
@@ -150,8 +169,7 @@ export async function uploadImageStimulus(
 ): Promise<{ imageUrl: string; imageStoragePath: string }> {
   const imageStoragePath = `stories/${userId}/${sessionId}/images/${Date.now()}_${file.name}`;
   const storageRef = ref(storage, imageStoragePath);
-  await uploadBytesResumable(storageRef, file, { contentType: file.type });
-  const imageUrl = await getDownloadURL(storageRef);
+  const imageUrl = await uploadFileAndGetUrl(storageRef, file);
   return { imageUrl, imageStoragePath };
 }
 
@@ -163,8 +181,7 @@ export async function uploadClip(
   durationSeconds: number,
   order: number,
 ): Promise<string> {
-  const sessionSnap = await getDoc(doc(db, 'storySessions', sessionId));
-  const clipLabel = imageStimulusTitle(sessionSnap.data());
+  const clipNumber = await nextClipNumber(sessionId);
 
   const clipRef = await addDoc(
     collection(db, 'clips'),
@@ -172,9 +189,9 @@ export async function uploadClip(
       storySessionId: sessionId,
       userId,
       order,
+      clipNumber,
       storagePath: '',
       durationSeconds,
-      label: clipLabel,
       status: 'uploading',
       createdAt: serverTimestamp(),
     }),
@@ -236,10 +253,9 @@ export async function uploadPromptClip(
     throw new Error('Photo not saved yet — upload the image first.');
   }
 
-  const clipLabel = imageStimulus.title?.trim() || undefined;
-
   const prompts = imageStimulus.prompts ?? {};
   const clipOrder = prompts[promptKey as keyof ImagePromptAnswers]?.clipOrder ?? [];
+  const clipNumber = await nextClipNumber(sessionId, undefined, promptKey);
 
   const clipRef = await addDoc(
     collection(db, 'clips'),
@@ -248,9 +264,9 @@ export async function uploadPromptClip(
       userId,
       order: clipOrder.length,
       promptKey,
+      clipNumber,
       storagePath: '',
       durationSeconds,
-      label: clipLabel,
       status: 'uploading',
       createdAt: serverTimestamp(),
     }),
@@ -382,7 +398,14 @@ export async function deletePromptClip(
 
 export async function finishPhotoOnlyStory(sessionId: string) {
   await updateDoc(doc(db, 'storySessions', sessionId), {
-    status: 'pending_approval',
+    status: 'approved',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function markContributorStorySubmitted(sessionId: string) {
+  await updateDoc(doc(db, 'storySessions', sessionId), {
+    contributorSubmitted: true,
     updatedAt: serverTimestamp(),
   });
 }
@@ -414,7 +437,29 @@ export async function markSessionComplete(sessionId: string) {
   });
 }
 
-export async function markStimulusComplete(userId: string, stimulusId: string) {
+async function resolveCollabBookIdForPrompts(bookId: string): Promise<string | null> {
+  const collabSnap = await getDoc(doc(db, 'collabBooks', bookId));
+  if (collabSnap.exists()) return bookId;
+
+  const albumSnap = await getDoc(doc(db, 'books', bookId));
+  if (!albumSnap.exists()) return null;
+
+  const collabBookId = albumSnap.data()?.collabBookId as string | undefined;
+  return collabBookId ?? null;
+}
+
+export async function markStimulusComplete(
+  userId: string,
+  stimulusId: string,
+  bookId?: string,
+  collabBookId?: string,
+) {
+  const targetCollabId =
+    collabBookId ?? (bookId ? await resolveCollabBookIdForPrompts(bookId) : null);
+  if (targetCollabId) {
+    await markPromptComplete(targetCollabId, userId, stimulusId);
+    return;
+  }
   const userRef = doc(db, 'users', userId);
   const snap = await getDoc(userRef);
   const progress = snap.data()?.stimulusProgress ?? { completedStimulusIds: [], currentIndex: 0 };
@@ -435,9 +480,39 @@ export function subscribeToBookStories(bookId: string, cb: (sessions: StorySessi
     where('bookId', '==', bookId),
     orderBy('updatedAt', 'desc'),
   );
-  return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => mapSession(d.id, d.data())));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      cb(snap.docs.map((d) => mapSession(d.id, d.data())));
+    },
+    (err) => {
+      console.error('subscribeToBookStories failed:', err);
+      cb([]);
+    },
+  );
+}
+
+/** Contributor stories live under the contributor's userId — book owners must query by bookOwnerId. */
+export function subscribeToContributorSubmissions(
+  bookOwnerId: string,
+  cb: (sessions: StorySession[]) => void,
+) {
+  const q = query(
+    collection(db, 'storySessions'),
+    where('bookOwnerId', '==', bookOwnerId),
+    where('isContributorStory', '==', true),
+    orderBy('updatedAt', 'desc'),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      cb(snap.docs.map((d) => mapSession(d.id, d.data())));
+    },
+    (err) => {
+      console.error('subscribeToContributorSubmissions failed:', err);
+      cb([]);
+    },
+  );
 }
 
 export async function updateStoryTitle(sessionId: string, title: string) {
@@ -585,11 +660,42 @@ export async function approveSession(sessionId: string, notes?: string) {
 }
 
 export async function rejectSession(sessionId: string, notes: string) {
+  const snap = await getDoc(doc(db, 'storySessions', sessionId));
+  const isContributor = snap.data()?.isContributorStory === true;
   await updateDoc(doc(db, 'storySessions', sessionId), {
-    status: 'rejected',
+    status: isContributor ? 'recording' : 'rejected',
     buyerNotes: notes,
+    ...(isContributor ? { contributorSubmitted: false } : {}),
     updatedAt: serverTimestamp(),
   });
+}
+
+/** Book owner removes a contributor submission (and its clips). */
+export async function deleteStorySession(sessionId: string): Promise<void> {
+  const clipsQ = query(collection(db, 'clips'), where('storySessionId', '==', sessionId));
+  const snap = await getDocs(clipsQ);
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(doc(db, 'storySessions', sessionId));
+  await batch.commit();
+}
+
+/** Remove a story from chapter lists, then delete the session and its clips. */
+export async function deleteBookStory(sessionId: string, chapters: Chapter[]): Promise<void> {
+  const batch = writeBatch(db);
+  let chapterUpdates = 0;
+  for (const chapter of chapters) {
+    if (!chapter.storyOrder.includes(sessionId)) continue;
+    batch.update(doc(db, 'chapters', chapter.id), {
+      storyOrder: chapter.storyOrder.filter((id) => id !== sessionId),
+      updatedAt: serverTimestamp(),
+    });
+    chapterUpdates += 1;
+  }
+  if (chapterUpdates > 0) {
+    await batch.commit();
+  }
+  await deleteStorySession(sessionId);
 }
 
 export async function updateImageStimulus(sessionId: string, imageStimulus: ImageStimulusData) {
@@ -604,4 +710,10 @@ export async function updateTextStimulus(sessionId: string, textStimulus: TextSt
     textStimulus: stripUndefined(textStimulus),
     updatedAt: serverTimestamp(),
   });
+}
+
+/** Re-run cloud transcription for a clip that failed or stalled. */
+export async function retryClipTranscription(clipId: string): Promise<void> {
+  const fn = httpsCallable<{ clipId: string }, { ok: boolean }>(functions, 'retryClipTranscription');
+  await fn({ clipId });
 }

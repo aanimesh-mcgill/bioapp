@@ -11,7 +11,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 
-ENV WHISPER_MODEL=base
+# Bake Whisper weights into the image — avoids HuggingFace 429/rate limits on every cold start.
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+
+ENV WHISPER_MODEL=small
 ENV WHISPER_DEVICE=cpu
 ENV WHISPER_COMPUTE_TYPE=int8
 

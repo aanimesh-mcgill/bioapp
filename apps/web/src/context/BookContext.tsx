@@ -9,6 +9,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import {
   createBook,
+  DEFAULT_BOOK_TITLE,
+  deleteBook,
   ensureUserHasBook,
   subscribeToBooks,
 } from '@/services/booksCollaboration';
@@ -19,7 +21,8 @@ interface BookContextValue {
   activeBook: CollabBook | null;
   loading: boolean;
   selectBook: (bookId: string) => void;
-  createAndSelectBook: (title: string, description?: string) => Promise<void>;
+  createAndSelectBook: (title: string, description?: string) => Promise<string | void>;
+  deleteOwnedBook: (bookId: string) => Promise<void>;
 }
 
 const BookContext = createContext<BookContextValue | null>(null);
@@ -59,7 +62,10 @@ export function BookProvider({ children }: { children: ReactNode }) {
           const candidate = [prev, persisted].find(
             (id) => !!id && nextBooks.some((book) => book.id === id),
           );
-          const fallback = nextBooks[0]?.id ?? null;
+          const autobiography = nextBooks.find(
+            (book) => book.title.toLowerCase() === DEFAULT_BOOK_TITLE.toLowerCase(),
+          );
+          const fallback = autobiography?.id ?? nextBooks[0]?.id ?? null;
           const resolved = candidate ?? fallback;
           if (resolved) localStorage.setItem(storageKey, resolved);
           return resolved;
@@ -89,6 +95,23 @@ export function BookProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const newBookId = await createBook(user.uid, title, description);
     selectBook(newBookId);
+    return newBookId;
+  };
+
+  const deleteOwnedBook = async (bookId: string) => {
+    if (!user) return;
+    await deleteBook(bookId, user.uid);
+    setActiveBookId((prev) => {
+      if (prev !== bookId) return prev;
+      const remaining = books.filter((b) => b.id !== bookId);
+      const autobiography = remaining.find(
+        (book) => book.title.toLowerCase() === DEFAULT_BOOK_TITLE.toLowerCase(),
+      );
+      const next = autobiography?.id ?? remaining[0]?.id ?? null;
+      if (next) localStorage.setItem(`autobio.activeBook.${user.uid}`, next);
+      else localStorage.removeItem(`autobio.activeBook.${user.uid}`);
+      return next;
+    });
   };
 
   const activeBook = useMemo(
@@ -104,6 +127,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
         loading,
         selectBook,
         createAndSelectBook,
+        deleteOwnedBook,
       }}
     >
       {children}

@@ -13,14 +13,22 @@ service firebase.storage {
     }
 
     function isValidImage() {
-      return request.resource.contentType.matches('image/.*');
+      return request.resource.contentType.matches('image/.*')
+        || request.resource.contentType == 'application/octet-stream';
+    }
+
+    function collabBook(bookId) {
+      return firestore.get(/databases/(default)/documents/collabBooks/$(bookId));
     }
 
     function isCollabBookMember(bookId) {
-      return isSignedIn() && (
-        firestore.get(/databases/(default)/documents/collabBooks/$(bookId)).data.ownerId == request.auth.uid ||
-        request.auth.uid in firestore.get(/databases/(default)/documents/collabBooks/$(bookId)).data.collaborators
-      );
+      return isSignedIn()
+        && collabBook(bookId).data != null
+        && (
+          collabBook(bookId).data.ownerId == request.auth.uid
+          || (collabBook(bookId).data.collaborators != null
+            && request.auth.uid in collabBook(bookId).data.collaborators)
+        );
     }
 
     // Legacy single-recording path
@@ -62,6 +70,13 @@ service firebase.storage {
       allow write: if isCollabBookMember(bookId)
         && request.resource.size < 100 * 1024 * 1024
         && request.resource.contentType.matches('audio/.*');
+    }
+
+    match /collabBooks/{bookId}/photos/{photoId}/{fileName} {
+      allow read: if isCollabBookMember(bookId);
+      allow write: if isCollabBookMember(bookId)
+        && request.resource.size < 20 * 1024 * 1024
+        && isValidImage();
     }
   }
 }

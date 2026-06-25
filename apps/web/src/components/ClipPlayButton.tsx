@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePickText } from '@/context/UiLocaleContext';
 
 interface ClipPlayButtonProps {
   audioUrl?: string;
@@ -19,6 +20,7 @@ export function ClipPlayButton({
   className = '',
   size = 'md',
 }: ClipPlayButtonProps) {
+  const t = usePickText();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function ClipPlayButton({
         onClick={toggle}
         disabled={!ready}
         aria-label={playing ? 'Pause clip' : 'Play clip'}
-        title={ready ? undefined : 'Audio not ready yet / ऑडियो तैयार नहीं'}
+        title={ready ? undefined : t({ en: 'Audio not ready yet', hi: 'ऑडियो तैयार नहीं' })}
       >
         {playing ? '⏸' : '▶'}
       </button>

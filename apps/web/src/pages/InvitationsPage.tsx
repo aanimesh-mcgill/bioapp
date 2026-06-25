@@ -31,7 +31,7 @@ export function InvitationsPage() {
         email: profile.email,
       });
       selectBook(accepted.bookId);
-      navigate('/contribute');
+      navigate('/stories');
     } catch (acceptError) {
       setError(acceptError instanceof Error ? acceptError.message : 'Could not accept invitation.');
     } finally {
@@ -90,10 +90,10 @@ export function InvitationsPage() {
                     className="btn-primary flex-1"
                     onClick={() => {
                       selectBook(invitation.bookId);
-                      navigate('/contribute');
+                      navigate('/stories');
                     }}
                   >
-                    Open Contribution Page
+                    Open book stories
                   </button>
                 )}
 

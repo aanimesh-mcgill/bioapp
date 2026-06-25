@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BilingualBtn, BilingualLine } from '@/components/BilingualText';
+import { usePickText } from '@/context/UiLocaleContext';
 import { classifyMicError, isSecureRecordingContext } from '@/lib/mediaPermissions';
 
 interface PhotoPickerProps {
@@ -33,6 +34,7 @@ function cameraErrorMessage(kind: ReturnType<typeof classifyMicError>): { en: st
 }
 
 export function PhotoPicker({ onSelect, disabled }: PhotoPickerProps) {
+  const t = usePickText();
   const galleryRef = useRef<HTMLInputElement>(null);
   const fallbackCameraRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -77,7 +79,7 @@ export function PhotoPicker({ onSelect, disabled }: PhotoPickerProps) {
       setCameraOpen(true);
     } catch (err) {
       const msg = cameraErrorMessage(classifyMicError(err));
-      setCameraError(`${msg.en} / ${msg.hi}`);
+      setCameraError(t(msg));
       fallbackCameraRef.current?.click();
     }
   };
@@ -151,8 +153,7 @@ export function PhotoPicker({ onSelect, disabled }: PhotoPickerProps) {
           onClick={startCamera}
           disabled={disabled}
         >
-          📷 Take Photo
-          <span className="font-hindi block text-xs font-normal opacity-90">फोटो लें</span>
+          📷 <BilingualBtn en="Take Photo" hi="फोटो लें" />
         </button>
         <button
           type="button"
@@ -160,8 +161,7 @@ export function PhotoPicker({ onSelect, disabled }: PhotoPickerProps) {
           onClick={() => galleryRef.current?.click()}
           disabled={disabled}
         >
-          🖼️ Upload
-          <span className="font-hindi block text-xs font-normal opacity-90">अपलोड करें</span>
+          🖼️ <BilingualBtn en="Upload" hi="अपलोड करें" />
         </button>
       </div>
 
@@ -170,7 +170,7 @@ export function PhotoPicker({ onSelect, disabled }: PhotoPickerProps) {
       )}
 
       {cameraOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-black">
           <video
             ref={videoRef}
             autoPlay
@@ -178,7 +178,7 @@ export function PhotoPicker({ onSelect, disabled }: PhotoPickerProps) {
             muted
             className="min-h-0 flex-1 object-cover"
           />
-          <div className="flex shrink-0 items-center justify-between gap-3 bg-black/90 px-4 py-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 bg-black/90 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <button type="button" className="btn-secondary text-sm" onClick={closeCamera}>
               <BilingualBtn en="Cancel" hi="रद्द" />
             </button>

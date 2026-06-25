@@ -38,12 +38,35 @@ service cloud.firestore {
 
 
 
-    function isBookOwner(bookId) {
-
-      return isSignedIn()
-
+    function isAlbumBookOwner(bookId) {
+      return exists(/databases/$(database)/documents/books/$(bookId))
         && get(/databases/$(database)/documents/books/$(bookId)).data.userId == request.auth.uid;
+    }
 
+    function canAccessBookId(bookId) {
+      return isAlbumBookOwner(bookId)
+        || (exists(/databases/$(database)/documents/collabBooks/$(bookId))
+          && isCollabBookMember(bookId));
+    }
+
+    function isLinkedAlbumBook(data) {
+      return data.collabBookId != null
+        && exists(/databases/$(database)/documents/collabBooks/$(data.collabBookId))
+        && isCollabBookMember(data.collabBookId);
+    }
+
+
+
+    function canAccessAlbumBook(albumBookId) {
+      return exists(/databases/$(database)/documents/books/$(albumBookId))
+        && (
+          get(/databases/$(database)/documents/books/$(albumBookId)).data.userId == request.auth.uid
+          || isLinkedAlbumBook(get(/databases/$(database)/documents/books/$(albumBookId)).data)
+        );
+    }
+
+    function isBookOwner(bookId) {
+      return isAlbumBookOwner(bookId);
     }
 
 
@@ -52,7 +75,17 @@ service cloud.firestore {
 
       let story = get(/databases/$(database)/documents/storySessions/$(storySessionId));
 
-      return story.data.bookId != null && isPublishedBook(story.data.bookId);
+      return (story.data.bookId != null && isPublishedBook(story.data.bookId))
+
+        || (story.data.chapterId != null
+
+          && exists(/databases/$(database)/documents/chapters/$(story.data.chapterId))
+
+          && isPublishedBook(
+
+            get(/databases/$(database)/documents/chapters/$(story.data.chapterId)).data.bookId
+
+          ));
 
     }
 
@@ -72,11 +105,13 @@ service cloud.firestore {
 
       return isPublishedStory(clipData.storySessionId)
 
+        || isBrowsableStory(clipData.storySessionId)
+
         || isOwner(clipData.userId)
 
         || (story.bookOwnerId != null && isOwner(story.bookOwnerId))
 
-        || (story.bookId != null && isBookOwner(story.bookId))
+        || (story.bookId != null && canAccessBookId(story.bookId))
 
         || isAdmin();
 
@@ -104,8 +139,25 @@ service cloud.firestore {
 
     }
 
+    function contributorStoryLocked() {
+      return resource.data.isContributorStory == true
+        && resource.data.contributorSubmitted == true;
+    }
+
+    function contributorStoryLockedById(sessionId) {
+      let s = get(/databases/$(database)/documents/storySessions/$(sessionId));
+      return s.data.isContributorStory == true && s.data.contributorSubmitted == true;
+    }
+
     function userEmail() {
       return isSignedIn() ? request.auth.token.email : null;
+    }
+
+    function isCollabBookMemberData(data) {
+      return isSignedIn() && (
+        data.ownerId == request.auth.uid ||
+        request.auth.uid in data.collaborators
+      );
     }
 
     function collabBookDoc(bookId) {
@@ -113,14 +165,39 @@ service cloud.firestore {
     }
 
     function isCollabBookMember(bookId) {
-      return isSignedIn() && (
-        collabBookDoc(bookId).data.ownerId == request.auth.uid ||
-        request.auth.uid in collabBookDoc(bookId).data.collaborators
-      );
+      return isCollabBookMemberData(collabBookDoc(bookId).data);
     }
 
     function isCollabBookOwner(bookId) {
       return isSignedIn() && collabBookDoc(bookId).data.ownerId == request.auth.uid;
+    }
+
+    function hasActiveBrowseShare(collabBookId) {
+      return exists(/databases/$(database)/documents/collabBooks/$(collabBookId))
+        && collabBookDoc(collabBookId).data.activeShareToken != null
+        && collabBookDoc(collabBookId).data.activeShareToken != '';
+    }
+
+    function collabBookIdForAlbum(albumBookId) {
+      return get(/databases/$(database)/documents/books/$(albumBookId)).data.collabBookId;
+    }
+
+    function isBrowsableAlbumBook(albumBookId) {
+      let collabId = collabBookIdForAlbum(albumBookId);
+      return collabId != null && hasActiveBrowseShare(collabId);
+    }
+
+    function isBrowsableStory(sessionId) {
+      let story = get(/databases/$(database)/documents/storySessions/$(sessionId)).data;
+      return (story.bookId != null
+          && exists(/databases/$(database)/documents/books/$(story.bookId))
+          && isBrowsableAlbumBook(story.bookId))
+        || (story.bookId != null && hasActiveBrowseShare(story.bookId))
+        || (story.chapterId != null
+          && exists(/databases/$(database)/documents/chapters/$(story.chapterId))
+          && isBrowsableAlbumBook(
+            get(/databases/$(database)/documents/chapters/$(story.chapterId)).data.bookId
+          ));
     }
 
 
@@ -163,13 +240,31 @@ service cloud.firestore {
 
       allow read: if resource.data.isPublished == true
 
-        || isOwner(resource.data.userId) || isAdmin();
+        || isBrowsableAlbumBook(bookId)
 
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        || isOwner(resource.data.userId)
 
-      allow update: if isOwner(resource.data.userId) || isAdmin();
+        || isLinkedAlbumBook(resource.data)
+
+        || isAdmin();
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid
+
+        && (request.resource.data.collabBookId == null
+
+          || isCollabBookMember(request.resource.data.collabBookId));
+
+      allow update: if isOwner(resource.data.userId)
+
+        || isLinkedAlbumBook(resource.data)
+
+        || isAdmin();
 
       allow delete: if isOwner(resource.data.userId) || isAdmin();
+
+      match /private/{docId} {
+        allow read, write: if isAlbumBookOwner(bookId) || isAdmin();
+      }
 
     }
 
@@ -179,17 +274,19 @@ service cloud.firestore {
 
       allow read: if isPublishedBook(resource.data.bookId)
 
+        || isBrowsableAlbumBook(resource.data.bookId)
+
         || isOwner(resource.data.userId)
 
-        || isBookOwner(resource.data.bookId)
+        || canAccessAlbumBook(resource.data.bookId)
 
         || isAdmin();
 
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
 
-      allow update: if isOwner(resource.data.userId) || isBookOwner(resource.data.bookId) || isAdmin();
+      allow update: if isOwner(resource.data.userId) || canAccessAlbumBook(resource.data.bookId) || isAdmin();
 
-      allow delete: if isOwner(resource.data.userId) || isBookOwner(resource.data.bookId) || isAdmin();
+      allow delete: if isOwner(resource.data.userId) || canAccessAlbumBook(resource.data.bookId) || isAdmin();
 
     }
 
@@ -197,11 +294,13 @@ service cloud.firestore {
 
     match /storySessions/{sessionId} {
 
-      allow read: if (resource.data.bookId != null && isPublishedBook(resource.data.bookId))
+      allow read: if isPublishedStory(sessionId)
+
+        || isBrowsableStory(sessionId)
 
         || isOwner(resource.data.userId)
 
-        || (resource.data.bookId != null && isBookOwner(resource.data.bookId))
+        || (resource.data.bookId != null && canAccessBookId(resource.data.bookId))
 
         || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
 
@@ -215,9 +314,9 @@ service cloud.firestore {
 
       );
 
-      allow update: if isOwner(resource.data.userId)
+      allow update: if (isOwner(resource.data.userId) && !contributorStoryLocked())
 
-        || isBookOwner(resource.data.bookId)
+        || (resource.data.bookId != null && canAccessBookId(resource.data.bookId))
 
         || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
 
@@ -225,7 +324,7 @@ service cloud.firestore {
 
       allow delete: if isOwner(resource.data.userId)
 
-        || isBookOwner(resource.data.bookId)
+        || (resource.data.bookId != null && canAccessBookId(resource.data.bookId))
 
         || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
 
@@ -241,7 +340,9 @@ service cloud.firestore {
 
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
 
-      allow update: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if (isOwner(resource.data.userId) && !contributorStoryLockedById(resource.data.storySessionId))
+
+        || isAdmin();
 
       allow delete: if isOwner(resource.data.userId) || isAdmin();
 
@@ -316,12 +417,41 @@ service cloud.firestore {
     }
 
     match /collabBooks/{bookId} {
-      allow read: if isCollabBookMember(bookId) || isAdmin();
+      allow read: if isCollabBookMemberData(resource.data) || isAdmin();
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.collaborators is list;
       allow update: if isCollabBookOwner(bookId) || isAdmin();
       allow delete: if isCollabBookOwner(bookId) || isAdmin();
+
+      match /prompts/{promptId} {
+        allow read: if isCollabBookMember(bookId) || isAdmin();
+        allow create: if isCollabBookMember(bookId)
+          && request.resource.data.bookId == bookId
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isCollabBookOwner(bookId) || isAdmin();
+        allow delete: if isCollabBookOwner(bookId)
+          || (isCollabBookMember(bookId)
+            && resource.data.source == 'user'
+            && resource.data.createdBy == request.auth.uid)
+          || isAdmin();
+      }
+
+      match /promptProgress/{progressUserId} {
+        allow read: if isCollabBookMember(bookId) || isAdmin();
+        allow create, update: if isCollabBookMember(bookId)
+          && progressUserId == request.auth.uid;
+        allow delete: if progressUserId == request.auth.uid || isAdmin();
+      }
+
+      match /photos/{photoId} {
+        allow read: if isCollabBookMember(bookId) || isAdmin();
+        allow create: if isCollabBookMember(bookId)
+          && request.resource.data.bookId == bookId
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isCollabBookMember(bookId) || isAdmin();
+        allow delete: if isCollabBookMember(bookId) || isAdmin();
+      }
     }
 
     match /bookStories/{storyId} {
