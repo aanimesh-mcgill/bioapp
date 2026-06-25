@@ -140,7 +140,7 @@ export function AlbumBookViewer({
     if (autoPlayAudiobook) setAudiobookMode(true);
   }, [autoPlayAudiobook, pageIndex]);
 
-  audiobookModeRef.current = audiobobookMode;
+  audiobookModeRef.current = audiobookMode;
 
   const current = pages[pageIndex];
   const spreadClips = useMemo(

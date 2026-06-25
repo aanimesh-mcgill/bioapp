@@ -325,6 +325,10 @@ service cloud.firestore {
 
         || (resource.data.bookOwnerId != null && isOwner(resource.data.bookOwnerId))
 
+        || (request.resource.data.bookOwnerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['bookOwnerId', 'bookId', 'collabBookId', 'updatedAt']))
+
         || isAdmin();
 
       allow delete: if isOwner(resource.data.userId)

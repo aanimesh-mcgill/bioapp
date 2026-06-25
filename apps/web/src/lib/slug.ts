@@ -40,12 +40,30 @@ export function spreadPublicUrl(
   spread: { storyId?: string; blockId?: string; pageIndex: number },
   options?: { play?: boolean },
 ): string {
+  const params = spreadListenParams(spread, options);
+  return `${getPublicAppOrigin()}/read/${bookSlug}?${params.toString()}`;
+}
+
+function spreadListenParams(
+  spread: { storyId?: string; blockId?: string; pageIndex: number },
+  options?: { play?: boolean },
+): URLSearchParams {
   const params = new URLSearchParams();
   if (spread.storyId) params.set('story', spread.storyId);
   if (spread.blockId) params.set('block', spread.blockId);
   params.set('page', String(spread.pageIndex));
   if (options?.play) params.set('play', '1');
-  return `${getPublicAppOrigin()}/read/${bookSlug}?${params.toString()}`;
+  return params;
+}
+
+/** PDF QR link — public listen page keyed by album book id (no login). */
+export function spreadListenUrl(
+  albumBookId: string,
+  spread: { storyId?: string; blockId?: string; pageIndex: number },
+  options?: { play?: boolean },
+): string {
+  const params = spreadListenParams(spread, options);
+  return `${getPublicAppOrigin()}/book/${albumBookId}/listen?${params.toString()}`;
 }
 
 export function contributeInviteUrl(inviteSlug: string): string {

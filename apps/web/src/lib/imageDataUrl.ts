@@ -1,6 +1,7 @@
 import { getBlob, ref } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { describeFirebaseError, logPdfError, type ImageLoadFailure } from '@/lib/pdfErrors';
+import { resolvePdfImagesViaFunction } from '@/lib/pdfExportFunctions';
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -128,7 +129,10 @@ export type ImageResolveResult = {
   failures: ImageLoadFailure[];
 };
 
-export async function resolveImagesForPdf(inputs: ImageResolveInput[]): Promise<ImageResolveResult> {
+export async function resolveImagesForPdf(
+  inputs: ImageResolveInput[],
+  opts?: { albumBookId?: string },
+): Promise<ImageResolveResult> {
   const resolved = new Map<string, string>();
   const failures: ImageLoadFailure[] = [];
   const seen = new Set<string>();
@@ -139,6 +143,54 @@ export async function resolveImagesForPdf(inputs: ImageResolveInput[]): Promise<
     seen.add(dedupeKey);
     return Boolean(input.url || input.storagePath);
   });
+
+  if (opts?.albumBookId && unique.length > 0) {
+    const storagePaths = [
+      ...new Set(
+        unique
+          .map((input) => input.storagePath ?? storagePathFromFirebaseUrl(input.url ?? ''))
+          .filter((path): path is string => Boolean(path)),
+      ),
+    ];
+    try {
+      const { resolved: fromFn, failures: fnFailures } = await resolvePdfImagesViaFunction(
+        opts.albumBookId,
+        storagePaths,
+      );
+      for (const input of unique) {
+        const path = input.storagePath ?? storagePathFromFirebaseUrl(input.url ?? '');
+        const dataUrl = path ? fromFn[path] : undefined;
+        if (!dataUrl) continue;
+        if (input.url) resolved.set(input.url, dataUrl);
+        if (input.storagePath) resolved.set(input.storagePath, dataUrl);
+        if (path) resolved.set(path, dataUrl);
+      }
+      for (const failure of fnFailures) {
+        const input = unique.find(
+          (item) =>
+            item.storagePath === failure.storagePath
+            || storagePathFromFirebaseUrl(item.url ?? '') === failure.storagePath,
+        );
+        failures.push({
+          storagePath: failure.storagePath,
+          pageLabel: input?.pageLabel,
+          code: 'functions/image-failed',
+          message: failure.message,
+        });
+      }
+      if (failures.length > 0) {
+        console.error('[PDF] image resolve summary (function)', {
+          requested: unique.length,
+          resolved: resolved.size,
+          failures,
+        });
+      }
+      return { resolved, failures };
+    } catch (err) {
+      logPdfError('images', 'resolvePdfImages function failed', err);
+      throw err;
+    }
+  }
 
   const settled = await Promise.all(
     unique.map(async (input) => {

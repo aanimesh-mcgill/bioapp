@@ -609,3 +609,5 @@ export const retryClipTranscription = onCall(async (request) => {
     transcript: updated.data()?.transcript?.text ?? null,
   };
 });
+
+export { resolvePdfImages, saveAlbumPdf } from './pdfExport';

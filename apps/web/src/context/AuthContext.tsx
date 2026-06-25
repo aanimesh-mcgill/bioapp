@@ -20,7 +20,11 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, googleProvider, functions } from '@/lib/firebase';
-import { getAuthErrorMessage, shouldUseGoogleRedirect } from '@/lib/authErrors';
+import {
+  getAuthErrorMessage,
+  googleSignInBlockedReason,
+  shouldUseGoogleRedirect,
+} from '@/lib/authErrors';
 import type { UserProfile, UserPreferences } from '@/types';
 
 const defaultPreferences: UserPreferences = {
@@ -137,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await ensureUserProfile(result.user);
         }
       } catch (err) {
+        console.error('Google redirect sign-in failed:', err);
         if (mounted) {
           setGoogleRedirectError(getAuthErrorMessage(err));
         }
@@ -185,6 +190,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     setGoogleRedirectError(null);
 
+    const blocked = googleSignInBlockedReason();
+    if (blocked) {
+      throw new Error(blocked);
+    }
+
     if (shouldUseGoogleRedirect()) {
       await signInWithRedirect(auth, googleProvider);
       return;
@@ -194,7 +204,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user') {
+      if (
+        code === 'auth/popup-blocked'
+        || code === 'auth/popup-closed-by-user'
+        || code === 'auth/cancelled-popup-request'
+      ) {
         await signInWithRedirect(auth, googleProvider);
         return;
       }

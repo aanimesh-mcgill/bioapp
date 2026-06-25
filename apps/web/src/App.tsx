@@ -56,6 +56,7 @@ export default function App() {
       <Route path="/invite/:token" element={<InvitationLinkPage />} />
       <Route path="/browse/:token" element={<PublicBrowsePage />} />
       <Route path="/read/:bookSlug/listen/:clipId" element={<ClipListenPage />} />
+      <Route path="/book/:albumBookId/listen" element={<PublicBookPage />} />
       <Route path="/read/:bookSlug" element={<PublicBookPage />} />
       <Route path="/read/:bookSlug/:storySlug" element={<PublicBookPage />} />
       <Route path="/contribute/:inviteSlug/*" element={<ContributeRoutes />} />

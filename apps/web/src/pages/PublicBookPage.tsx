@@ -5,7 +5,7 @@ import { BilingualBtn } from '@/components/BilingualText';
 import { usePickText } from '@/context/UiLocaleContext';
 import { buildAlbumPages, filterBlankAlbumPages, indexClipsByStory, resolveSpreadPageIndex } from '@/lib/albumPages';
 import { bookPublicUrl, chapterPublicUrl, storyPublicUrl } from '@/lib/slug';
-import { getPublishedBookData, getStoryByPublicSlug } from '@/services/books';
+import { getPublishedAlbumById, getPublishedBookData, getStoryByPublicSlug } from '@/services/books';
 import type { AudioClip, Book, Chapter, StorySession } from '@/types';
 
 function scopeAlbumContent(
@@ -45,7 +45,11 @@ function scopeAlbumContent(
 
 export function PublicBookPage() {
   const t = usePickText();
-  const { bookSlug, storySlug } = useParams<{ bookSlug: string; storySlug?: string }>();
+  const { bookSlug, storySlug, albumBookId } = useParams<{
+    bookSlug?: string;
+    storySlug?: string;
+    albumBookId?: string;
+  }>();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const contributeHubPath =
@@ -63,12 +67,13 @@ export function PublicBookPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!bookSlug) return;
+    if (!bookSlug && !albumBookId) return;
 
     async function load() {
       setLoading(true);
+      setError('');
       try {
-        if (storySlug) {
+        if (storySlug && bookSlug) {
           const data = await getStoryByPublicSlug(bookSlug, storySlug);
           if (!data) {
             setError(t({ en: 'Story not found or book is not published.', hi: 'कहानी नहीं मिली या पुस्तक प्रकाशित नहीं।' }));
@@ -78,7 +83,20 @@ export function PublicBookPage() {
           setChapters([]);
           setStories([data.story]);
           setClips(data.clips as AudioClip[]);
-        } else {
+        } else if (albumBookId) {
+          const data = await getPublishedAlbumById(albumBookId);
+          if (!data) {
+            setError(t({
+              en: 'Album not found or not published yet. Publish the album so QR codes work for guests.',
+              hi: 'एल्बम नहीं मिली या अभी प्रकाशित नहीं। मेहमानों के लिए QR कोड चलाने हेतु एल्बम प्रकाशित करें।',
+            }));
+            return;
+          }
+          setBook(data.book);
+          setChapters(data.chapters);
+          setStories(data.stories);
+          setClips(data.clips);
+        } else if (bookSlug) {
           const data = await getPublishedBookData(bookSlug);
           if (!data) {
             setError(t({ en: 'Book not found or not published yet.', hi: 'पुस्तक नहीं मिली या अभी प्रकाशित नहीं।' }));
@@ -98,7 +116,7 @@ export function PublicBookPage() {
     }
 
     load();
-  }, [bookSlug, storySlug, t]);
+  }, [bookSlug, storySlug, albumBookId, t]);
 
   const scoped = useMemo(
     () =>
@@ -167,6 +185,20 @@ export function PublicBookPage() {
         <Link to="/" className="btn-primary mt-6">
           <BilingualBtn en="Go to AATMA KATHA" hi="AATMA KATHA पर जाएं" />
         </Link>
+      </div>
+    );
+  }
+
+  if (pages.length === 0) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-[#f4ebe0] px-6 text-center">
+        <p className="text-lg text-slate-700">
+          {t({
+            en: 'This album has no published content yet.',
+            hi: 'इस एल्बम में अभी कोई प्रकाशित सामग्री नहीं है।',
+          })}
+        </p>
+        <p className="mt-2 text-sm text-slate-600">{book.title}</p>
       </div>
     );
   }

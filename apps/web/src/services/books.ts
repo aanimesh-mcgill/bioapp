@@ -472,6 +472,12 @@ export async function publishBook(bookId: string, publish: boolean) {
   const bookSnap = await getDoc(doc(db, 'books', bookId));
   const collabBookId = bookSnap.data()?.collabBookId as string | undefined;
 
+  if (publish && bookSnap.exists()) {
+    const albumBook = mapBook(bookSnap.id, bookSnap.data());
+    const { stories } = await fetchBookBundle(albumBook, albumBook.userId);
+    await ensureStoriesLinkedForPdfExport(albumBook, stories);
+  }
+
   await updateDoc(doc(db, 'books', bookId), {
     isPublished: publish,
     updatedAt: serverTimestamp(),
@@ -627,6 +633,13 @@ export async function getBookPreviewData(bookId: string, userId: string) {
 export async function getPublishedBookData(slug: string) {
   const book = await getBookBySlug(slug, { publishedOnly: true });
   if (!book) return null;
+  const bundle = await fetchBookBundle(book);
+  return { book, ...bundle };
+}
+
+export async function getPublishedAlbumById(albumBookId: string) {
+  const book = await getBookById(albumBookId);
+  if (!book?.isPublished) return null;
   const bundle = await fetchBookBundle(book);
   return { book, ...bundle };
 }

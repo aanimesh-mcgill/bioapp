@@ -8,7 +8,7 @@ import { filterBlankAlbumPages } from '@/lib/albumPages';
 import { resolveImagesForPdf } from '@/lib/imageDataUrl';
 import { logPdfError, PdfOperationError } from '@/lib/pdfErrors';
 import { qrCodeDataUrl } from '@/lib/qrCode';
-import { spreadPublicUrl } from '@/lib/slug';
+import { spreadListenUrl } from '@/lib/slug';
 import type { AudioClip, Book } from '@/types';
 
 const PAGE_W_MM = 210;
@@ -138,7 +138,10 @@ async function renderBookPdfDoc(
     }));
 
   onProgress?.({ stage: 'images', detail: `Loading ${imageInputs.length} images…` });
-  const { resolved: resolvedImages, failures: imageFailures } = await resolveImagesForPdf(imageInputs);
+  const { resolved: resolvedImages, failures: imageFailures } = await resolveImagesForPdf(
+    imageInputs,
+    { albumBookId: book.id },
+  );
 
   if (imageFailures.length > 0) {
     throw new PdfOperationError(
@@ -171,8 +174,8 @@ async function renderBookPdfDoc(
             p.storyId === page.storyId &&
             (page.blockId ? p.blockId === page.blockId : true),
         );
-        const url = spreadPublicUrl(
-          book.publicSlug,
+        const url = spreadListenUrl(
+          book.id,
           {
             storyId: page.storyId,
             blockId: page.blockId,

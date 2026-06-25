@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { consumePendingInviteToken } from '@/lib/pendingInvite';
-import { getAuthErrorMessage } from '@/lib/authErrors';
+import { getAuthErrorMessage, isIosDevice, isStandalonePwa } from '@/lib/authErrors';
 import { BilingualBtn, BilingualLine, T } from '@/components/BilingualText';
 import { AppMenu } from '@/components/AppMenu';
 import { LanguageToggle } from '@/components/LanguageToggle';
@@ -189,6 +189,15 @@ export function LoginPage() {
           <BilingualBtn en="Continue with Google" hi="Google से जारी रखें" />
         )}
       </button>
+
+      {isIosDevice() && isStandalonePwa() && (
+        <p className="mt-3 text-center text-xs leading-relaxed text-amber-800">
+          {t({
+            en: 'Google sign-in from the home-screen icon can fail on iPhone. If it does, open autobio-b5dbf.web.app in Safari instead.',
+            hi: 'iPhone पर होम स्क्रीन आइकन से Google साइन-इन कभी-कभी विफल होता है। Safari में autobio-b5dbf.web.app खोलकर प्रयास करें।',
+          })}
+        </p>
+      )}
 
       <div className="mt-6 text-center text-sm text-slate-600">
         {mode === 'login' ? (

@@ -1,9 +1,8 @@
 import { doc, getDoc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { stripUndefined } from '@/lib/firestoreUtils';
 import { logPdfError, PdfOperationError } from '@/lib/pdfErrors';
-import { uploadBlobResumable } from '@/lib/storageUpload';
+import { saveAlbumPdfViaFunction } from '@/lib/pdfExportFunctions';
 import type { PdfOverrides } from '@/lib/pdfOverrides';
 
 export type SavedBookPdfMeta = {
@@ -113,56 +112,19 @@ export async function saveBookPdf(
   if (opts?.collabBookId) {
     await ensureAlbumBookStorageAccess(bookId, opts.collabBookId);
   }
-  const storagePath = `album-books/${bookId}/saved.pdf`;
-  const storageRef = ref(storage, storagePath);
-  try {
-    await uploadBlobResumable(storageRef, blob, 'application/pdf');
-  } catch (err) {
-    logPdfError('upload', `Storage upload failed: ${storagePath}`, err);
-    throw new PdfOperationError('upload', `Could not upload PDF to ${storagePath}.`, { cause: err });
-  }
 
-  let url: string;
   try {
-    url = await getDownloadURL(storageRef);
+    const { url, storagePath } = await saveAlbumPdfViaFunction(bookId, blob);
+    return {
+      url,
+      storagePath,
+      generatedAt: new Date(),
+      overridesUpdatedAt: null,
+    };
   } catch (err) {
-    logPdfError('upload', `getDownloadURL failed: ${storagePath}`, err);
-    throw new PdfOperationError('upload', 'PDF uploaded but download URL could not be created.', {
+    logPdfError('upload', `saveAlbumPdf function failed for ${bookId}`, err);
+    throw new PdfOperationError('upload', `Could not upload PDF to album-books/${bookId}/saved.pdf.`, {
       cause: err,
     });
   }
-
-  const now = serverTimestamp();
-
-  try {
-    await setDoc(
-      pdfDraftRef(bookId),
-      stripUndefined({
-        savedPdfUrl: url,
-        savedPdfStoragePath: storagePath,
-        savedPdfAt: now,
-        updatedAt: now,
-      }),
-      { merge: true },
-    );
-
-    await updateDoc(
-      doc(db, 'books', bookId),
-      stripUndefined({
-        savedPdfUrl: url,
-        savedPdfAt: now,
-        updatedAt: now,
-      }),
-    );
-  } catch (err) {
-    logPdfError('metadata', `Firestore save failed for book ${bookId}`, err);
-    throw new PdfOperationError('metadata', 'PDF uploaded but metadata could not be saved.', { cause: err });
-  }
-
-  return {
-    url,
-    storagePath,
-    generatedAt: new Date(),
-    overridesUpdatedAt: null,
-  };
 }
