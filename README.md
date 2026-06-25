@@ -84,9 +84,9 @@ firebase emulators:start
 
 ### GitHub Secrets Required
 
-| Secret | Description |
-|--------|-------------|
-| `FIREBASE_TOKEN` | From `firebase login:ci` |
+| Secret / variable | Description |
+|-------------------|-------------|
+| `Firebase` (repo variable) or `FIREBASE_TOKEN` (secret) | CI token from `firebase login:ci` |
 | `VITE_FIREBASE_API_KEY` | Firebase web API key |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | For Cloud Run deploy (optional) |
 | `GCP_SERVICE_ACCOUNT` | GCP service account email (optional) |
