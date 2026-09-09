@@ -8,7 +8,7 @@ import {
   indexedDBLocalPersistence,
   initializeAuth,
 } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, getFirestore, initializeFirestore } from 'firebase/firestore';
 import { connectStorageEmulator, getStorage } from 'firebase/storage';
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 
@@ -35,8 +35,16 @@ function createAuth() {
   }
 }
 
+const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+
 export const auth = createAuth();
-export const db = getFirestore(app);
+// Against the emulator, force long-polling. The default WebChannel streaming
+// transport intermittently trips a Firestore SDK assertion ("INTERNAL ASSERTION
+// FAILED: Unexpected state") when multiple snapshot listeners are active. Live
+// builds keep the default transport via getFirestore().
+export const db = useEmulators
+  ? initializeFirestore(app, { experimentalForceLongPolling: true })
+  : getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app, 'us-central1');
 
@@ -44,7 +52,7 @@ export const functions = getFunctions(app, 'us-central1');
 // VITE_USE_FIREBASE_EMULATORS=true (see apps/web/.env) to route all Firebase
 // traffic to the local emulators instead of the live project. Production builds
 // leave this unset, so behavior is unchanged there.
-if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
+if (useEmulators) {
   const host = import.meta.env.VITE_FIREBASE_EMULATOR_HOST ?? '127.0.0.1';
   connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
   connectFirestoreEmulator(db, host, 8080);
