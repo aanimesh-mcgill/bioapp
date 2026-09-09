@@ -1,0 +1,14 @@
+{
+  "name": "Autobio",
+  "install": "bash scripts/cloud-agent-install.sh",
+  "terminals": [
+    {
+      "name": "web-dev",
+      "command": "npm run dev"
+    },
+    {
+      "name": "firebase-emulators",
+      "command": "npx --yes firebase emulators:start --project autobio-b5dbf --only auth,functions,firestore,storage"
+    }
+  ]
+}
